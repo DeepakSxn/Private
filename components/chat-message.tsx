@@ -3,7 +3,7 @@
 import { useState, useRef } from "react"
 import type { Message } from "@/types/message"
 import { Button } from "@/components/ui/button"
-import { File, FileText, FileSpreadsheet, ZoomIn, ZoomOut, ChevronLeft, ChevronRight, Highlighter, Image, Download } from "lucide-react"
+import { File, FileText, FileSpreadsheet, ZoomIn, ZoomOut, ChevronLeft, ChevronRight, Highlighter, Image, Download, Copy } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
@@ -127,6 +127,12 @@ export function ChatMessage({ message }: ChatMessageProps) {
     }
   }
 
+  const handleCopy = () => {
+    navigator.clipboard.writeText(message.content);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   const renderFilePreview = () => {
     if (!message.file) return null;
 
@@ -191,7 +197,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
             <div className="flex flex-col min-w-0">
               <span className={cn(
                 "font-medium truncate",
-                isUser ? "text-white" : "text-black dark:text-black"
+                isUser ? "text-black" : "text-black dark:text-black"
               )}>
                 {message.file.name}
               </span>
@@ -212,7 +218,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
           {userQuery && (
             <div className={cn(
               "mt-2 whitespace-pre-wrap break-words",
-              isUser ? "text-white" : "text-black dark:text-black"
+              isUser ? "text-black" : "text-black dark:text-black"
             )}>
               {userQuery}
             </div>
@@ -247,7 +253,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
           <div
             className={cn(
               "rounded-2xl px-4 py-2 text-sm break-words",
-              isUser ? "bg-gray-200 text-black" : "bg-white text-black",
+              isUser ? "bg-gray-300 text-black" : "bg-white text-black",
               isSystem && "bg-yellow-100 dark:bg-yellow-900 text-yellow-900 dark:text-yellow-100",
               "shadow-sm",
               isUser ? "ml-auto" : ""
@@ -259,6 +265,17 @@ export function ChatMessage({ message }: ChatMessageProps) {
             }}
           >
             {renderMessageContent()}
+            {/* Copy icon for assistant messages */}
+            {isAssistant && (
+              <button
+                onClick={handleCopy}
+                title={copied ? "Copied!" : "Copy response"}
+                className="ml-2 p-1 rounded hover:bg-gray-100 inline-flex items-center"
+              >
+                <Copy className="w-4 h-4" />
+                {copied && <span className="ml-1 text-xs text-green-500">Copied!</span>}
+              </button>
+            )}
           </div>
         </div>
       </div>

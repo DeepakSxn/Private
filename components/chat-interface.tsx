@@ -168,6 +168,12 @@ export function ChatInterface({
       if (addMessage) {
         await addMessage("assistant", accumulatedContent)
       }
+
+      // If this is the first message in the thread, update the thread name
+      if (messages.length === 0 && selectedThreadId && onThreadNameUpdate) {
+        const newName = accumulatedContent.slice(0, 50); // Limit to 50 chars
+        onThreadNameUpdate(newName);
+      }
     } catch (error: unknown) {
       if (error instanceof Error && error.name === 'AbortError') {
         // Don't remove the message on abort, just stop streaming
@@ -338,6 +344,12 @@ export function ChatInterface({
       };
     }
     setMessages((prev) => [...prev, userMessage]);
+
+    // If this is the first message in the thread, update the thread name
+    if (messages.length === 0 && selectedThreadId && onThreadNameUpdate) {
+      const newName = fullMessage.slice(0, 50); // Limit to 50 chars
+      onThreadNameUpdate(newName);
+    }
 
     // 2. Prepare the message history to send to the AI
     const messageHistory = [...messages, userMessage];
