@@ -1,3 +1,8 @@
+/**
+ * API endpoint for managing messages within a specific chat thread.
+ * Provides operations to fetch and create messages for a given thread ID.
+ * Uses Supabase for data persistence and maintains message ordering.
+ */
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
@@ -6,8 +11,8 @@ const supabase = createClient(
   process.env.SUPABASE_ANON_KEY!
 );
 
-export async function GET(req: NextRequest, context: { params: { id: string } }) {
-  const { id } = context.params;
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   console.log('GET /api/threads/[id]/messages - Fetching messages for thread:', id);
   const { data, error } = await supabase
     .from('messages')
@@ -22,8 +27,8 @@ export async function GET(req: NextRequest, context: { params: { id: string } })
   return NextResponse.json(data);
 }
 
-export async function POST(req: NextRequest, context: { params: { id: string } }) {
-  const { id } = context.params;
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const body = await req.json();
   console.log('POST /api/threads/[id]/messages - Creating message:', { id, body });
   const { data, error } = await supabase

@@ -1,3 +1,8 @@
+/**
+ * API endpoint for managing individual chat threads.
+ * Provides CRUD operations (GET, PUT, DELETE) for a specific thread by ID.
+ * Uses Supabase for data persistence.
+ */
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
@@ -6,8 +11,8 @@ const supabase = createClient(
   process.env.SUPABASE_ANON_KEY!
 );
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
-  const { id } = params;
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   console.log('GET /api/threads/[id] - Fetching thread with id:', id);
   const { data, error } = await supabase
     .from('threads')
@@ -22,8 +27,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   return NextResponse.json(data);
 }
 
-export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
-  const { id } = params;
+export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const body = await req.json();
   console.log('PUT /api/threads/[id] - Updating thread:', { id, body });
   const { data, error } = await supabase
@@ -39,8 +44,8 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   return NextResponse.json(data[0]);
 }
 
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
-  const { id } = params;
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   console.log('DELETE /api/threads/[id] - Deleting thread with id:', id);
   const { error } = await supabase
     .from('threads')
