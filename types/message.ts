@@ -17,4 +17,5 @@ export interface Message {
   timestamp: Date
   imageUrl?: string
   file?: FileAttachment
+  fileContent?: string
 }

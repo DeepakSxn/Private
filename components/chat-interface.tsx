@@ -218,12 +218,6 @@ export function ChatInterface({
     }
   }, [sidebarOpen])
 
-  useEffect(() => {
-    if (messageContainerRef.current) {
-      messageContainerRef.current.scrollTop = scrollTopRef.current;
-    }
-  }, [messages, sidebarOpen])
-
   // Initialize speech recognition
   useEffect(() => {
     const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition
@@ -321,8 +315,8 @@ export function ChatInterface({
       } catch (e) {
          // handle error
       }
-      // 2. Construct the message content
-      fullMessage = `Attached file (${selectedFile.name}):\n\n${fileText}\n\nUser query: ${input.trim()}`;
+      // 2. Construct the message content for UI only (no file content)
+      fullMessage = `Attached file (${selectedFile.name})\n\nUser query: ${input.trim()}`;
       userMessage = {
          id: uuidv4(),
          content: fullMessage,
@@ -335,6 +329,7 @@ export function ChatInterface({
            size: selectedFile.size,
            url: URL.createObjectURL(selectedFile),
          },
+         fileContent: fileText, // new property for backend/AI
       };
     } else {
       userMessage = {

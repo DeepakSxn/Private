@@ -17,8 +17,11 @@ export async function POST(req: Request) {
 
     // --- If file is attached: Use only file content and user query with Chat API ---
     if (lastMessage.content?.startsWith("Attached file (")) {
-      const match = lastMessage.content.match(/^Attached file \([^)]+\):\n\n([\s\S]+?)\n\nUser query:/);
-      const fileContent = match ? match[1] : "";
+      // Prefer fileContent property if present
+      const fileContent = lastMessage.fileContent || (() => {
+        const match = lastMessage.content.match(/^Attached file \([^)]+\):\n\n([\s\S]+?)\n\nUser query:/);
+        return match ? match[1] : "";
+      })();
       const userQuery = lastMessage.content.split("User query:")[1]?.trim() || "";
 
       const promptMessages: OpenAI.ChatCompletionMessageParam[] = [

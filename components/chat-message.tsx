@@ -190,6 +190,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
       if (match) {
         userQuery = match[1].trim();
       }
+      // Only show file name, size, and user query (never file content)
       return (
         <div className="flex flex-col gap-2 w-full">
           <div className="flex items-center gap-2">
@@ -220,7 +221,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
               "mt-2 whitespace-pre-wrap break-words",
               isUser ? "text-black" : "text-black dark:text-black"
             )}>
-              {userQuery}
+              <span className="font-semibold">User query:</span> {userQuery}
             </div>
           )}
         </div>
