@@ -59,7 +59,10 @@ export function ChatInterface({
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [abortController, setAbortController] = useState<AbortController | null>(null)
   const [sendLocked, setSendLocked] = useState(false)
-  const [pendingMessage, setPendingMessage] = useState<string | null>(null)
+  const [pendingMessage, setPendingMessage] = useState<{
+    input: string;
+    selectedFile: File | null;
+  } | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messageContainerRef = useRef<HTMLDivElement>(null)
@@ -293,18 +296,39 @@ export function ChatInterface({
     }
   }
 
+  // Effect: When selectedThreadId changes and there is a pending message, send it
+  useEffect(() => {
+    if (pendingMessage && selectedThreadId) {
+      // Call sendMessage with the pending input and file
+      actuallySendMessage(pendingMessage.input, pendingMessage.selectedFile);
+      setPendingMessage(null);
+    }
+  }, [selectedThreadId]);
+
+  // Refactor handleSendMessage to use pending logic
   const handleSendMessage = async () => {
     if (sendLocked || isProcessing || (!input.trim() && !selectedFile)) return;
+    if (!selectedThreadId && createThread && setSelectedThreadId) {
+      // No thread: create one and store pending message
+      setPendingMessage({ input, selectedFile });
+      const newThread = await createThread("New Chat");
+      if (newThread.id) setSelectedThreadId(newThread.id);
+      return;
+    }
+    // Thread exists: send immediately
+    actuallySendMessage(input, selectedFile);
+  };
+
+  // Move the message sending logic to a new function
+  const actuallySendMessage = async (inputValue: string, file: File | null) => {
     setSendLocked(true);
     setIsProcessing(true);
-    console.log('handleSendMessage called');
-    let fullMessage = input.trim();
+    let fullMessage = inputValue.trim();
     let userMessage: Message;
-
-    if (selectedFile) {
+    if (file) {
       // 1. Read the file content
       const formData = new FormData();
-      formData.append('file', selectedFile);
+      formData.append('file', file);
       let fileText = "";
       try {
         const res = await fetch('/api/read-file', { method: 'POST', body: formData });
@@ -316,7 +340,7 @@ export function ChatInterface({
          // handle error
       }
       // 2. Construct the message content for UI only (no file content)
-      fullMessage = `Attached file (${selectedFile.name})\n\nUser query: ${input.trim()}`;
+      fullMessage = `Attached file (${file.name})\n\nUser query: ${inputValue.trim()}`;
       userMessage = {
          id: uuidv4(),
          content: fullMessage,
@@ -324,10 +348,10 @@ export function ChatInterface({
          role: "user",
          timestamp: new Date(),
          file: {
-           name: selectedFile.name,
-           type: selectedFile.type,
-           size: selectedFile.size,
-           url: URL.createObjectURL(selectedFile),
+           name: file.name,
+           type: file.type,
+           size: file.size,
+           url: URL.createObjectURL(file),
          },
          fileContent: fileText, // new property for backend/AI
       };
@@ -340,21 +364,17 @@ export function ChatInterface({
          timestamp: new Date(),
       };
     }
-
     // If this is the first message in the thread, update the thread name (using user message content)
     if (messages.length === 0 && selectedThreadId && onThreadNameUpdate) {
        const newName = fullMessage.slice(0, 50); // Limit to 50 chars
        onThreadNameUpdate(newName);
     }
-
     // Save the user message to Supabase (if addMessage is provided and a thread is selected)
     if (addMessage && selectedThreadId) {
        await addMessage("user", fullMessage);
     }
-
     // Prepare the message history (including the new user message) to send to the AI
     const messageHistory = [...messages, userMessage];
-
     // Call the AI endpoint (only once per user message)
     let accumulatedContent = "";
     try {
@@ -363,9 +383,7 @@ export function ChatInterface({
          headers: { "Content-Type": "application/json" },
          body: JSON.stringify({ messages: messageHistory, detailedMode: true }),
        });
-
        if (!response.ok) throw new Error("AI API error");
-
        const reader = response.body?.getReader();
        const decoder = new TextDecoder();
        let done = false;
@@ -401,18 +419,10 @@ export function ChatInterface({
            }
          }
        }
-
        // Save the assistant's response (accumulatedContent) to Supabase (if addMessage is provided and a thread is selected)
        if (addMessage && selectedThreadId) {
          await addMessage("assistant", accumulatedContent || "[No response]");
        }
-
-       // (Optional) If you want to update the thread name based on the assistant's response (e.g. first message in thread), uncomment:
-       // if (messages.length === 0 && selectedThreadId && onThreadNameUpdate) {
-       //   const newName = accumulatedContent.slice(0, 50);
-       //   onThreadNameUpdate(newName);
-       // }
-
     } catch (error) {
        toast({
          title: "Error",
@@ -426,7 +436,7 @@ export function ChatInterface({
        setSelectedFile(null);
        if (fileInputRef.current) fileInputRef.current.value = "";
     }
-  }
+  };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {

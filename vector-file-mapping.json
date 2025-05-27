@@ -52,5 +52,11 @@
     "original_file_id": "file-LDsVsVRNTdKtnxix8yBLxw",
     "filename": "dd11.pdf",
     "created_at": 1748339314477
+  },
+  {
+    "vector_store_file_id": "file-ViVaVT94zDx6JLUcUvLiJz",
+    "original_file_id": "file-ViVaVT94zDx6JLUcUvLiJz",
+    "filename": "Day 13.txt",
+    "created_at": 1748350361062
   }
 ]

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { Header } from "@/components/header"
 import { ChatInterface } from "@/components/chat-interface"
 import { Sidebar } from "@/components/sidebar"
@@ -34,13 +34,6 @@ export function AssistantDashboard() {
     setMessages
   } = useMessages(selectedThreadId)
 
-  // Auto-select the first thread after threads are loaded
-  useEffect(() => {
-    if (!selectedThreadId && threads && threads.length > 0) {
-      setSelectedThreadId(threads[0].id);
-    }
-  }, [threads, selectedThreadId]);
-
   const handleNewChat = async () => {
     const newThread = await createThread("New Chat")
     setSelectedThreadId(newThread.id)
@@ -51,6 +44,7 @@ export function AssistantDashboard() {
     await deleteThread(id)
     if (selectedThreadId === id) {
       setSelectedThreadId(undefined)
+      setMessages([]) // Clear chat area after deleting selected thread
     }
     await fetchThreads(); // Refresh sidebar
   }
