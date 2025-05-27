@@ -69,6 +69,7 @@ export function ChatInterface({
   const sendMessageAndGetAIResponse = async (userMessageContent: string) => {
     let threadId = selectedThreadId;
     // Add user message to backend if addMessage is provided
+    console.log('sendMessageAndGetAIResponse: about to call addMessage', { addMessageExists: !!addMessage, threadId, userMessageContent });
     if (addMessage && threadId) {
       await addMessage("user", userMessageContent)
     }
@@ -166,7 +167,9 @@ export function ChatInterface({
 
       // After streaming is complete, save the assistant's message to Supabase
       if (addMessage) {
-        await addMessage("assistant", accumulatedContent)
+        console.log("Saving assistant message to Supabase:", accumulatedContent);
+        await addMessage("assistant", accumulatedContent);
+        console.log("Assistant message saved to Supabase.");
       }
 
       // If this is the first message in the thread, update the thread name
@@ -195,11 +198,6 @@ export function ChatInterface({
       onStatusChange({ status: "connected", message: "System ready" })
     }
   };
-
-  const debouncedSend = debounce(() => {
-    setSendLocked(true)
-    Promise.resolve(handleSendMessage()).finally(() => setSendLocked(false))
-  }, 1000)
 
   const scrollToBottom = () => {
     if (messagesEndRef.current) {
@@ -253,20 +251,6 @@ export function ChatInterface({
     }
   }, [toast])
 
-  useEffect(() => {
-    // If a new thread was just created and there's a pending message, send it
-    if (
-      pendingMessage &&
-      prevThreadIdRef.current !== selectedThreadId &&
-      selectedThreadId &&
-      addMessage
-    ) {
-      sendMessageAndGetAIResponse(pendingMessage);
-      setPendingMessage(null);
-      prevThreadIdRef.current = selectedThreadId;
-    }
-  }, [selectedThreadId, pendingMessage, addMessage]);
-
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
@@ -292,18 +276,21 @@ export function ChatInterface({
 
   const handleStopStreaming = () => {
     if (abortController) {
-      abortController.abort()
-      setIsStreaming(false)
-      setIsProcessing(false)
-      onStatusChange({ status: "connected", message: "System ready" })
+      abortController.abort();
+      setIsStreaming(false);
+      setIsProcessing(false);
+      setSendLocked(false);
+      onStatusChange({ status: "connected", message: "System ready" });
     }
   }
 
   const handleSendMessage = async () => {
-    if ((!input.trim() && !selectedFile) || isProcessing) return;
-
-    let userMessage: Message;
+    if (sendLocked || isProcessing || (!input.trim() && !selectedFile)) return;
+    setSendLocked(true);
+    setIsProcessing(true);
+    console.log('handleSendMessage called');
     let fullMessage = input.trim();
+    let userMessage: Message;
 
     if (selectedFile) {
       // 1. Read the file content
@@ -317,113 +304,117 @@ export function ChatInterface({
           fileText = text;
         }
       } catch (e) {
-        // handle error
+         // handle error
       }
       // 2. Construct the message content
       fullMessage = `Attached file (${selectedFile.name}):\n\n${fileText}\n\nUser query: ${input.trim()}`;
       userMessage = {
-        id: uuidv4(),
-        content: fullMessage,
-        type: "file",
-        role: "user",
-        timestamp: new Date(),
-        file: {
-          name: selectedFile.name,
-          type: selectedFile.type,
-          size: selectedFile.size,
-          url: URL.createObjectURL(selectedFile),
-        },
+         id: uuidv4(),
+         content: fullMessage,
+         type: "file",
+         role: "user",
+         timestamp: new Date(),
+         file: {
+           name: selectedFile.name,
+           type: selectedFile.type,
+           size: selectedFile.size,
+           url: URL.createObjectURL(selectedFile),
+         },
       };
     } else {
       userMessage = {
-        id: uuidv4(),
-        content: fullMessage,
-        type: "text",
-        role: "user",
-        timestamp: new Date(),
+         id: uuidv4(),
+         content: fullMessage,
+         type: "text",
+         role: "user",
+         timestamp: new Date(),
       };
     }
-    setMessages((prev) => [...prev, userMessage]);
 
-    // If this is the first message in the thread, update the thread name
+    // If this is the first message in the thread, update the thread name (using user message content)
     if (messages.length === 0 && selectedThreadId && onThreadNameUpdate) {
-      const newName = fullMessage.slice(0, 50); // Limit to 50 chars
-      onThreadNameUpdate(newName);
+       const newName = fullMessage.slice(0, 50); // Limit to 50 chars
+       onThreadNameUpdate(newName);
     }
 
-    // 2. Prepare the message history to send to the AI
+    // Save the user message to Supabase (if addMessage is provided and a thread is selected)
+    if (addMessage && selectedThreadId) {
+       await addMessage("user", fullMessage);
+    }
+
+    // Prepare the message history (including the new user message) to send to the AI
     const messageHistory = [...messages, userMessage];
 
-    // 3. Call the AI endpoint
-    setIsProcessing(true);
+    // Call the AI endpoint (only once per user message)
+    let accumulatedContent = "";
     try {
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: messageHistory, detailedMode: true }),
-      });
+       const response = await fetch("/api/chat", {
+         method: "POST",
+         headers: { "Content-Type": "application/json" },
+         body: JSON.stringify({ messages: messageHistory, detailedMode: true }),
+       });
 
-      if (!response.ok) throw new Error("AI API error");
+       if (!response.ok) throw new Error("AI API error");
 
-      // Stream the AI response and accumulate content
-      let accumulatedContent = "";
-      const reader = response.body?.getReader();
-      const decoder = new TextDecoder();
-      let done = false;
-      while (reader && !done) {
-        const { value, done: streamDone } = await reader.read();
-        done = streamDone;
-        if (value) {
-          const chunk = decoder.decode(value);
-          const lines = chunk.split("\n");
-          for (const line of lines) {
-            if (line.startsWith("data: ")) {
-              const data = line.slice(6);
-              if (data === "[DONE]") continue;
-              try {
-                const parsed = JSON.parse(data);
-                let newContent = "";
-                if (Array.isArray(parsed.content)) {
-                  newContent = parsed.content
-                    .filter((c: any) => typeof c.text === "string")
-                    .map((c: any) => c.text)
-                    .join("");
-                } else if (typeof parsed.content === "string") {
-                  newContent = parsed.content;
-                }
-                if (newContent) {
-                  accumulatedContent += newContent;
-                  // Optionally, you can show streaming updates here
-                }
-              } catch (e) {
-                // Ignore parse errors for non-JSON lines
-              }
-            }
-          }
-        }
-      }
+       const reader = response.body?.getReader();
+       const decoder = new TextDecoder();
+       let done = false;
+       while (reader && !done) {
+         const { value, done: streamDone } = await reader.read();
+         done = streamDone;
+         if (value) {
+           const chunk = decoder.decode(value);
+           const lines = chunk.split("\n");
+           for (const line of lines) {
+             if (line.startsWith("data: ")) {
+               const data = line.slice(6);
+               if (data === "[DONE]") continue;
+               try {
+                 const parsed = JSON.parse(data);
+                 let newContent = "";
+                 if (Array.isArray(parsed.content)) {
+                   newContent = parsed.content
+                     .filter((c: any) => typeof c.text === "string")
+                     .map((c: any) => c.text)
+                     .join("");
+                 } else if (typeof parsed.content === "string") {
+                   newContent = parsed.content;
+                 }
+                 if (newContent) {
+                   accumulatedContent += newContent;
+                   // (Optional) streaming update (if needed) can be added here
+                 }
+               } catch (e) {
+                 // Ignore parse errors for non-JSON lines
+               }
+             }
+           }
+         }
+       }
 
-      // 4. Add the AI's response to the UI
-      const aiMessage: Message = {
-        id: uuidv4(),
-        content: accumulatedContent || "[No response]",
-        type: "text",
-        role: "assistant",
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, aiMessage]);
+       // Save the assistant's response (accumulatedContent) to Supabase (if addMessage is provided and a thread is selected)
+       if (addMessage && selectedThreadId) {
+         await addMessage("assistant", accumulatedContent || "[No response]");
+       }
+
+       // (Optional) If you want to update the thread name based on the assistant's response (e.g. first message in thread), uncomment:
+       // if (messages.length === 0 && selectedThreadId && onThreadNameUpdate) {
+       //   const newName = accumulatedContent.slice(0, 50);
+       //   onThreadNameUpdate(newName);
+       // }
+
     } catch (error) {
-      // Handle error (show toast, etc.)
-      toast({
-        title: "Error",
-        description: "Failed to get AI response.",
-        variant: "destructive",
-      });
+       toast({
+         title: "Error",
+         description: "Failed to get AI response.",
+         variant: "destructive",
+       });
     } finally {
-      setIsProcessing(false);
-      setInput("");
-      setSelectedFile(null);
-      if (fileInputRef.current) fileInputRef.current.value = "";
+       setSendLocked(false);
+       setIsProcessing(false);
+       setInput("");
+       setSelectedFile(null);
+       if (fileInputRef.current) fileInputRef.current.value = "";
     }
   }
 
@@ -431,7 +422,7 @@ export function ChatInterface({
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       if (!sendLocked && !isProcessing) {
-        debouncedSend();
+        handleSendMessage();
       }
     }
   }
@@ -566,7 +557,7 @@ export function ChatInterface({
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            disabled={isProcessing || sendLocked}
+            disabled={isProcessing || sendLocked || isRecording}
           />
 
           <div className="absolute right-3 bottom-3 flex items-center space-x-2">
@@ -574,7 +565,7 @@ export function ChatInterface({
               variant="ghost"
               size="icon"
               onClick={handleAttachFile}
-              disabled={isProcessing}
+              disabled={sendLocked || isProcessing}
               title="Attach file"
               className="text-gray-500 hover:text-gray-700"
             >
@@ -586,7 +577,7 @@ export function ChatInterface({
               variant="ghost" 
               size="icon" 
               onClick={handleVoiceInput} 
-              disabled={isProcessing} 
+              disabled={sendLocked || isProcessing} 
               title={isRecording ? "Stop voice input" : "Start voice input"}
               className={isRecording ? "text-red-500" : ""}
             >
@@ -607,7 +598,7 @@ export function ChatInterface({
             ) : (
               <Button
                 onClick={handleSendMessage}
-                disabled={(!input.trim() && !selectedFile) || isProcessing || isRecording || sendLocked}
+                disabled={sendLocked || isProcessing || (!input.trim() && !selectedFile) || isRecording}
                 className="rounded-full bg-primary hover:bg-primary/90 text-primary-foreground dark:bg-[#2d2d2d] dark:hover:bg-[#3d3d3d]"
                 size="icon"
                 title="Send message"

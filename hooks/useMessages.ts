@@ -20,6 +20,7 @@ export function useMessages(threadId: string | undefined) {
   // Add a message to a thread
   const addMessage = async (role: string, content: string) => {
     if (!threadId) return;
+    console.log(`[useMessages] addMessage called with:`, { threadId, role, content });
     const res = await fetch(`/api/threads/${threadId}/messages`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

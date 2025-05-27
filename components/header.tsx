@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Menu, User, Upload, Trash2 } from "lucide-react"
 import type { SystemStatus } from "@/types/system-status"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
 import { useTheme } from "next-themes"
 
@@ -17,6 +17,11 @@ export function Header({ systemStatus, toggleSidebar }: HeaderProps) {
   const [isProfileDialogOpen, setIsProfileDialogOpen] = useState(false)
   const [profileImage, setProfileImage] = useState<string | null>(null)
   const { theme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -37,11 +42,19 @@ export function Header({ systemStatus, toggleSidebar }: HeaderProps) {
     <header className="fixed top-0 left-0 w-full z-50 bg-background">
       <div className="flex h-16 items-center px-4 md:px-6 border-b border-border">
         <div className="flex items-center flex-shrink-0">
-          <img
-            src={theme === 'dark' ? '/dark.webp' : '/light.webp'}
-            alt="Logo"
-            className="h-10 w-auto"
-          />
+          {mounted ? (
+            <img
+              src={theme === 'dark' ? '/dark.webp' : '/light.webp'}
+              alt="Logo"
+              className="h-10 w-auto"
+            />
+          ) : (
+            <img
+              src="/light.webp"
+              alt="Logo"
+              className="h-10 w-auto"
+            />
+          )}
         </div>
         <div className="flex-1" />
 

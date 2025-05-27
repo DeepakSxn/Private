@@ -23,7 +23,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     console.error('GET /api/threads/[id]/messages error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
-  console.log('GET /api/threads/[id]/messages - Success:', data?.length);
+  console.log('GET /api/threads/[id]/messages - Success:', data?.length, data);
   return NextResponse.json(data);
 }
 
@@ -31,6 +31,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const { id } = await params;
   const body = await req.json();
   console.log('POST /api/threads/[id]/messages - Creating message:', { id, body });
+  if (!id) {
+    console.error('POST /api/threads/[id]/messages error: Missing thread_id');
+    return NextResponse.json({ error: 'Missing thread_id' }, { status: 400 });
+  }
+  if (!body.role || !body.content) {
+    console.error('POST /api/threads/[id]/messages error: Missing role or content', body);
+    return NextResponse.json({ error: 'Missing role or content' }, { status: 400 });
+  }
   const { data, error } = await supabase
     .from('messages')
     .insert([{ thread_id: id, role: body.role, content: body.content }])
