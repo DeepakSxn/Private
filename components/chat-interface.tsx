@@ -62,6 +62,8 @@ export function ChatInterface({
   const [pendingMessage, setPendingMessage] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const messageContainerRef = useRef<HTMLDivElement>(null)
+  const scrollTopRef = useRef<number>(0)
   const recognitionRef = useRef<SpeechRecognition | null>(null)
   const { toast } = useToast()
   const prevThreadIdRef = useRef<string | undefined>(selectedThreadId)
@@ -208,6 +210,19 @@ export function ChatInterface({
   useEffect(() => {
     scrollToBottom()
   }, [messages])
+
+  // Maintain scroll position during sidebar toggle
+  useEffect(() => {
+    if (messageContainerRef.current) {
+      scrollTopRef.current = messageContainerRef.current.scrollTop;
+    }
+  }, [sidebarOpen])
+
+  useEffect(() => {
+    if (messageContainerRef.current) {
+      messageContainerRef.current.scrollTop = scrollTopRef.current;
+    }
+  }, [messages, sidebarOpen])
 
   // Initialize speech recognition
   useEffect(() => {
@@ -473,9 +488,9 @@ export function ChatInterface({
   }
 
   return (
-    <div className="flex flex-col h-full chat-background">
-      {/* Chat Header */}
-      <div className="border-b border-border p-4 flex items-center justify-between bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <div className="flex flex-col h-full chat-background relative">
+      {/* Chat Header - Fixed position */}
+      <div className="fixed top-0 left-0 right-0 border-b border-border p-4 flex items-center justify-between bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 z-40">
         <div className="flex items-center gap-2">
           <Button
             variant="ghost"
@@ -501,7 +516,11 @@ export function ChatInterface({
         <div className="flex-1" />
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-w-2 scrollbar-track-blue-lighter scrollbar-thumb-blue scrollbar-thumb-rounded">
+      {/* Messages Container - Fixed position below header */}
+      <div 
+        ref={messageContainerRef}
+        className="flex-1 overflow-y-auto p-4 pt-20 pb-24 space-y-4 scrollbar-w-2 scrollbar-track-blue-lighter scrollbar-thumb-blue scrollbar-thumb-rounded"
+      >
         <div className="max-w-3xl mx-auto w-full">
           {messages.map((message) => (
             <div key={message.id} className="mb-6">
@@ -512,7 +531,8 @@ export function ChatInterface({
         </div>
       </div>
 
-      <div className="border-t border-border p-4 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      {/* Input Container - Fixed position at bottom */}
+      <div className="fixed bottom-0 left-0 right-0 border-t border-border p-4 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 z-40">
         {isProcessing && (
           <div className="flex items-center justify-center text-sm text-muted-foreground mb-2">
             <Loader2 className="h-3 w-3 animate-spin mr-1" />
