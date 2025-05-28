@@ -64,5 +64,11 @@
     "original_file_id": "file-9cjZPxhcg4j4uPt3VSWqiX",
     "filename": "day 5.txt",
     "created_at": 1748442209898
+  },
+  {
+    "vector_store_file_id": "file-3z6XQi7MCF3b2SHdSug3pY",
+    "original_file_id": "file-3z6XQi7MCF3b2SHdSug3pY",
+    "filename": "day 7.txt",
+    "created_at": 1748443143744
   }
 ]
