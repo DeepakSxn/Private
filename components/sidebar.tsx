@@ -83,12 +83,11 @@ export function Sidebar({
 
       {/* Main sidebar */}
       {isOpen && (
-        <div 
-          className={`fixed inset-y-0 left-0 transition-all duration-300 ease-in-out z-30 ${
-            isOpen ? 'translate-x-0' : '-translate-x-full'
-          }`}
+        <div
+          className="fixed top-16 left-0 w-[260px] h-[calc(100vh-4rem)] z-50 bg-background shadow-xl border-r border-border transition-transform duration-300"
+          style={{ transform: isOpen ? "translateX(0)" : "translateX(-100%)" }}
         >
-          <div className="relative h-full flex flex-col w-[260px] bg-background dark:bg-black text-foreground dark:text-white shadow-xl border-r border-border dark:border-white/10 mt-16">
+          <div className="relative h-full flex flex-col w-full text-foreground dark:text-white">
             {/* Toggle button inside sidebar */}
             <Button
               variant="ghost"
