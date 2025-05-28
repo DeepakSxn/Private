@@ -104,7 +104,7 @@ export function Sidebar({
               {/* Tabs for Documents and Upload */}
               <Tabs defaultValue="documents" className="flex-none">
                 <div className="border-b border-border dark:border-white/10">
-                  <TabsList className="w-full flex flex-col h-auto p-0 bg-background dark:bg-black">
+                  <TabsList className="w-full flex flex-col h-auto p-0 bg-background dark:bg-black gap-4 mt-6">
                     <TabsTrigger 
                       value="documents" 
                       className="w-full justify-start rounded-none border-b border-border dark:border-white/10 data-[state=active]:border-b-0 text-foreground dark:text-white data-[state=active]:bg-background dark:data-[state=active]:bg-black hover:bg-accent dark:hover:bg-white/5 text-sm group relative transition-colors duration-200"
@@ -133,7 +133,7 @@ export function Sidebar({
                   value="documents" 
                   className="p-2 bg-background dark:bg-black border-b border-border dark:border-white/10"
                 >
-                  <div className="rounded-lg border border-border dark:border-white/10 bg-background dark:bg-black p-2">
+                  <div className="rounded-lg border border-border dark:border-white/10 bg-background dark:bg-black p-4">
                     {/* Empty documents content */}
                   </div>
                 </TabsContent>

@@ -397,6 +397,9 @@ export function ChatInterface({
             await addMessage("user", userMessage.content, userMessage.file);
             await fetchMessages();
           }
+          // Clear file from input area immediately after sending
+          setSelectedFile(null);
+          if (fileInputRef.current) fileInputRef.current.value = "";
           // If this is the first message in the thread, update the thread name using the user's message
           if (messages.length === 0 && selectedThreadId && onThreadNameUpdate) {
             const newName = fullMessage.slice(0, 50); // Limit to 50 chars
@@ -415,8 +418,6 @@ export function ChatInterface({
           setSendLocked(false);
           setIsProcessing(false);
           setInput("");
-          setSelectedFile(null);
-          if (fileInputRef.current) fileInputRef.current.value = "";
         };
         reader.readAsDataURL(file);
         return;
@@ -454,6 +455,9 @@ export function ChatInterface({
           await addMessage("user", userMessage.content, userMessage.file);
           await fetchMessages();
         }
+        // Clear file from input area immediately after sending
+        setSelectedFile(null);
+        if (fileInputRef.current) fileInputRef.current.value = "";
       }
     } else {
       userMessage = {
@@ -480,65 +484,78 @@ export function ChatInterface({
     const messageHistory = [...messages, userMessage];
     // Call the AI endpoint (only once per user message)
     let accumulatedContent = "";
+    // Create a new AbortController for this request
+    const controller = new AbortController();
+    setAbortController(controller);
     try {
-       const response = await fetch("/api/chat", {
-         method: "POST",
-         headers: { "Content-Type": "application/json" },
-         body: JSON.stringify({ messages: messageHistory, detailedMode: true }),
-       });
-       if (!response.ok) throw new Error("AI API error");
-       const reader = response.body?.getReader();
-       const decoder = new TextDecoder();
-       let done = false;
-       while (reader && !done) {
-         const { value, done: streamDone } = await reader.read();
-         done = streamDone;
-         if (value) {
-           const chunk = decoder.decode(value);
-           const lines = chunk.split("\n");
-           for (const line of lines) {
-             if (line.startsWith("data: ")) {
-               const data = line.slice(6);
-               if (data === "[DONE]") continue;
-               try {
-                 const parsed = JSON.parse(data);
-                 let newContent = "";
-                 if (Array.isArray(parsed.content)) {
-                   newContent = parsed.content
-                     .filter((c: any) => typeof c.text === "string")
-                     .map((c: any) => c.text)
-                     .join("");
-                 } else if (typeof parsed.content === "string") {
-                   newContent = parsed.content;
-                 }
-                 if (newContent) {
-                   accumulatedContent += newContent;
-                   // (Optional) streaming update (if needed) can be added here
-                 }
-               } catch (e) {
-                 // Ignore parse errors for non-JSON lines
-               }
-             }
-           }
-         }
-       }
-       // Save the assistant's response (accumulatedContent) to Supabase (if addMessage is provided and a thread is selected)
-       if (addMessage && selectedThreadId && fetchMessages) {
-         await addMessage("assistant", accumulatedContent || "[No response]");
-         await fetchMessages();
-       }
-    } catch (error) {
-       toast({
-         title: "Error",
-         description: "Failed to get AI response.",
-         variant: "destructive",
-       });
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: messageHistory, detailedMode: true }),
+        signal: controller.signal,
+      });
+      if (!response.ok) throw new Error("AI API error");
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      let done = false;
+      while (reader && !done) {
+        const { value, done: streamDone } = await reader.read();
+        done = streamDone;
+        if (value) {
+          const chunk = decoder.decode(value);
+          const lines = chunk.split("\n");
+          for (const line of lines) {
+            if (line.startsWith("data: ")) {
+              const data = line.slice(6);
+              if (data === "[DONE]") continue;
+              try {
+                const parsed = JSON.parse(data);
+                let newContent = "";
+                if (Array.isArray(parsed.content)) {
+                  newContent = parsed.content
+                    .filter((c: any) => typeof c.text === "string")
+                    .map((c: any) => c.text)
+                    .join("");
+                } else if (typeof parsed.content === "string") {
+                  newContent = parsed.content;
+                }
+                if (newContent) {
+                  accumulatedContent += newContent;
+                }
+              } catch (e) {
+                // Ignore parse errors for non-JSON lines
+              }
+            }
+          }
+        }
+      }
+      // Save the assistant's response (accumulatedContent) to Supabase (if addMessage is provided and a thread is selected)
+      if (addMessage && selectedThreadId && fetchMessages) {
+        await addMessage("assistant", accumulatedContent || "[No response]");
+        await fetchMessages();
+      }
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+        toast({
+          title: "Stopped",
+          description: "AI response was stopped.",
+          variant: "default",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to get AI response.",
+          variant: "destructive",
+        });
+      }
     } finally {
-       setSendLocked(false);
-       setIsProcessing(false);
-       setInput("");
-       setSelectedFile(null);
-       if (fileInputRef.current) fileInputRef.current.value = "";
+      setSendLocked(false);
+      setIsProcessing(false);
+      setIsStreaming(false);
+      setInput("");
+      setSelectedFile(null);
+      setAbortController(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
 
@@ -631,27 +648,28 @@ export function ChatInterface({
       {/* Messages Container - Fixed position below header */}
       <div 
         ref={messageContainerRef}
-        className="flex-1 overflow-y-auto p-4 pt-20 pb-24 space-y-4 scrollbar-w-2 scrollbar-track-blue-lighter scrollbar-thumb-blue scrollbar-thumb-rounded"
+        className="flex-1 overflow-y-auto p-4 pt-24 pb-28 space-y-4 scrollbar-w-2 scrollbar-track-blue-lighter scrollbar-thumb-blue scrollbar-thumb-rounded"
       >
-        <div className="max-w-3xl mx-auto w-full">
+        <div className="max-w-2xl mx-auto w-full">
           {messages.map((message, idx) => (
             <div key={message.id || idx} className="mb-6">
               <ChatMessage message={message} />
             </div>
           ))}
+          {/* Inline AI processing indicator: only show if processing and last message is not assistant */}
+          {isProcessing && (!messages.length || messages[messages.length-1].role !== 'assistant') && (
+            <div className="mb-6 flex items-start gap-4 pr-5">
+              <div className="flex-shrink-0 w-8 h-8 flex items-center justify-center text-primary">
+                <Loader2 className="h-5 w-5 animate-spin" />
+              </div>
+            </div>
+          )}
           <div ref={messagesEndRef} />
         </div>
       </div>
 
       {/* Input Container - Fixed position at bottom */}
       <div className="fixed bottom-0 left-0 right-0 border-t border-border p-4 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 z-40">
-        {isProcessing && (
-          <div className="flex items-center justify-center text-sm text-muted-foreground mb-2">
-            <Loader2 className="h-3 w-3 animate-spin mr-1" />
-            <span>{isStreaming ? "AI is responding..." : "Processing..."}</span>
-          </div>
-        )}
-
         {isRecording && (
           <div className="flex items-center justify-center text-sm text-red-500 mb-2">
             <Mic className="h-3 w-3 animate-pulse mr-1" />
@@ -659,7 +677,7 @@ export function ChatInterface({
           </div>
         )}
 
-        <div className="max-w-3xl mx-auto w-full relative">
+        <div className="max-w-2xl mx-auto w-full">
           {selectedFile && (
             <div className="mb-2 flex items-center gap-2 p-2 bg-muted rounded-lg">
               <FileText className="h-4 w-4 text-primary" />
@@ -683,62 +701,64 @@ export function ChatInterface({
             accept=".pdf,.txt,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.csv"
           />
 
-          <Textarea
-            placeholder="Type your message..."
-            className="min-h-[80px] resize-none pr-24 rounded-2xl"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            disabled={isProcessing || sendLocked || isRecording}
-          />
-
-          <div className="absolute right-3 bottom-3 flex items-center space-x-2">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={handleAttachFile}
-              disabled={sendLocked || isProcessing}
-              title="Attach file"
-              className="text-gray-500 hover:text-gray-700"
-            >
-              <Paperclip className="h-4 w-4" />
-              <span className="sr-only">Attach file</span>
-            </Button>
-
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              onClick={handleVoiceInput} 
-              disabled={sendLocked || isProcessing} 
-              title={isRecording ? "Stop voice input" : "Start voice input"}
-              className={isRecording ? "text-red-500" : ""}
-            >
-              {isRecording ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
-              <span className="sr-only">{isRecording ? "Stop voice input" : "Start voice input"}</span>
-            </Button>
-
-            {isStreaming ? (
+          <div className="flex items-end w-full bg-white border border-border rounded-2xl px-4 py-2 shadow-sm">
+            <Textarea
+              placeholder="Type your message..."
+              className="flex-1 border-none outline-none resize-none bg-transparent p-0 m-0 shadow-none focus:outline-none focus:ring-0"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              disabled={isProcessing || sendLocked || isRecording}
+              style={{ minHeight: 60, maxHeight: 200, overflowY: 'auto' }}
+            />
+            <div className="flex items-end gap-1 pl-2">
               <Button
-                onClick={handleStopStreaming}
-                className="rounded-full bg-red-500 hover:bg-red-600 text-white"
+                variant="ghost"
                 size="icon"
-                title="Stop AI response"
+                onClick={handleAttachFile}
+                disabled={sendLocked || isProcessing}
+                title="Attach file"
+                className="text-gray-500 hover:text-gray-700"
               >
-                <StopCircle className="h-4 w-4" />
-                <span className="sr-only">Stop</span>
+                <Paperclip className="h-4 w-4" />
+                <span className="sr-only">Attach file</span>
               </Button>
-            ) : (
-              <Button
-                onClick={handleSendMessage}
-                disabled={sendLocked || isProcessing || (!input.trim() && !selectedFile) || isRecording}
-                className="rounded-full bg-primary hover:bg-primary/90 text-primary-foreground dark:bg-[#2d2d2d] dark:hover:bg-[#3d3d3d]"
-                size="icon"
-                title="Send message"
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                onClick={handleVoiceInput} 
+                disabled={sendLocked || isProcessing} 
+                title={isRecording ? "Stop voice input" : "Start voice input"}
+                className={isRecording ? "text-red-500" : ""}
               >
-                <Send className="h-4 w-4 text-white" />
-                <span className="sr-only">Send</span>
+                {isRecording ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                <span className="sr-only">{isRecording ? "Stop voice input" : "Start voice input"}</span>
               </Button>
-            )}
+              {(isProcessing || isStreaming) ? (
+                <Button
+                  onClick={handleStopStreaming}
+                  variant="ghost"
+                  size="icon"
+                  title="Stop AI response"
+                 // className="text-red-500 hover:text-red-600 bg-transparent shadow-none  active:scale-100"
+                  style={{ boxShadow: 'none', outline: 'none', background: 'transparent' }}
+                >
+                  <StopCircle className="h-6 w-6" />
+                  <span className="sr-only">Stop</span>
+                </Button>
+              ) : (
+                <Button
+                  onClick={handleSendMessage}
+                  disabled={sendLocked || isProcessing || (!input.trim() && !selectedFile) || isRecording}
+                  className="rounded-full bg-primary hover:bg-primary/90 text-primary-foreground dark:bg-[#2d2d2d] dark:hover:bg-[#3d3d3d]"
+                  size="icon"
+                  title="Send message"
+                >
+                  <Send className="h-4 w-4 text-white" />
+                  <span className="sr-only">Send</span>
+                </Button>
+              )}
+            </div>
           </div>
         </div>
       </div>
