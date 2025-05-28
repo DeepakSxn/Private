@@ -56,8 +56,11 @@ export function AssistantDashboard() {
 
   const handleThreadNameUpdate = async (newName: string) => {
     if (selectedThreadId) {
+      console.log('[handleThreadNameUpdate] Renaming thread', selectedThreadId, 'to', newName);
       await renameThread(selectedThreadId, newName)
       await fetchThreads(); // Refresh sidebar
+      // Force re-selecting the thread to trigger UI update
+      setSelectedThreadId(selectedThreadId);
     }
   }
 
@@ -87,6 +90,7 @@ export function AssistantDashboard() {
             selectedThreadId={selectedThreadId}
             setSelectedThreadId={setSelectedThreadId}
             createThread={createThread}
+            fetchMessages={fetchMessages}
           />
         </main>
       </div>

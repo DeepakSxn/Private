@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import type { Message } from "@/types/message";
+import type { Message, FileAttachment } from "@/types/message";
 
 export function useMessages(threadId: string | undefined) {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -18,13 +18,13 @@ export function useMessages(threadId: string | undefined) {
   }, [threadId]);
 
   // Add a message to a thread
-  const addMessage = async (role: string, content: string) => {
+  const addMessage = async (role: string, content: string, file?: FileAttachment) => {
     if (!threadId) return;
-    console.log(`[useMessages] addMessage called with:`, { threadId, role, content });
+    console.log(`[useMessages] addMessage called with:`, { threadId, role, content, file });
     const res = await fetch(`/api/threads/${threadId}/messages`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ role, content }),
+      body: JSON.stringify({ role, content, file }),
     });
     const newMsg = await res.json();
     console.log(`[useMessages] API /api/threads/${threadId}/messages POST response:`, newMsg);

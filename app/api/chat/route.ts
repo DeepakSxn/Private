@@ -1,4 +1,5 @@
 import { OpenAI } from "openai"
+import { NextResponse } from 'next/server';
 
 // Allow responses up to 30 seconds
 export const maxDuration = 30
@@ -18,11 +19,19 @@ export async function POST(req: Request) {
     // --- If file is attached: Use only file content and user query with Chat API ---
     if (lastMessage.content?.startsWith("Attached file (")) {
       // Prefer fileContent property if present
-      const fileContent = lastMessage.fileContent || (() => {
-        const match = lastMessage.content.match(/^Attached file \([^)]+\):\n\n([\s\S]+?)\n\nUser query:/);
-        return match ? match[1] : "";
-      })();
-      const userQuery = lastMessage.content.split("User query:")[1]?.trim() || "";
+      let fileContent = lastMessage.fileContent;
+
+      // If fileContent is missing but file.url is present, fetch it
+      if (!fileContent && lastMessage.file?.url) {
+        const res = await fetch(lastMessage.file.url);
+        if (!res.ok) throw new Error('Failed to fetch file from storage');
+        // Handle text files; for binary, you may want to use arrayBuffer/base64
+        fileContent = await res.text();
+      }
+
+      // Extract everything after the first line (file attachment line) as the user query
+      const lines = lastMessage.content.split('\n');
+      const userQuery = lines.slice(1).join('\n').trim();
 
       const promptMessages: OpenAI.ChatCompletionMessageParam[] = [
         {

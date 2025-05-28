@@ -6,7 +6,7 @@ import { useState, useRef, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Send, Mic, MicOff, Paperclip, Loader2, Menu, X, FileText, StopCircle } from "lucide-react"
-import type { Message } from "@/types/message"
+import type { Message, FileAttachment } from "@/types/message"
 import type { SystemStatus } from "@/types/system-status"
 import { ChatMessage } from "@/components/chat-message"
 import { Switch } from "@/components/ui/switch"
@@ -22,10 +22,11 @@ interface ChatInterfaceProps {
   onToggleSidebar?: () => void
   sidebarOpen?: boolean
   onThreadNameUpdate?: (threadName: string) => void
-  addMessage?: (role: string, content: string) => Promise<any>
+  addMessage?: (role: string, content: string, file?: FileAttachment) => Promise<any>
   selectedThreadId?: string
   setSelectedThreadId?: (id: string) => void
   createThread?: (name: string) => Promise<any>
+  fetchMessages?: () => Promise<void>
 }
 
 // Debounce utility
@@ -40,6 +41,11 @@ function debounce(fn: (...args: any[]) => void, delay: number) {
   };
 }
 
+// Helper to check if file is an image
+function isImageFile(file: File | null | undefined) {
+  return file && file.type.startsWith('image/');
+}
+
 export function ChatInterface({ 
   onStatusChange, 
   messages, 
@@ -50,7 +56,8 @@ export function ChatInterface({
   addMessage,
   selectedThreadId,
   setSelectedThreadId,
-  createThread
+  createThread,
+  fetchMessages
 }: ChatInterfaceProps) {
   const [input, setInput] = useState("")
   const [isProcessing, setIsProcessing] = useState(false)
@@ -76,7 +83,11 @@ export function ChatInterface({
     // Add user message to backend if addMessage is provided
     console.log('sendMessageAndGetAIResponse: about to call addMessage', { addMessageExists: !!addMessage, threadId, userMessageContent });
     if (addMessage && threadId) {
-      await addMessage("user", userMessageContent)
+      // Only call addMessage for text messages here, file messages are handled in actuallySendMessage
+      if (!selectedFile) {
+        const newUserMsg = await addMessage("user", userMessageContent);
+        setMessages((prev) => [...prev, newUserMsg]);
+      }
     }
 
     // Get the last message we just added (which contains the file content)
@@ -171,10 +182,10 @@ export function ChatInterface({
       }
 
       // After streaming is complete, save the assistant's message to Supabase
-      if (addMessage) {
+      if (addMessage && selectedThreadId && fetchMessages) {
         console.log("Saving assistant message to Supabase:", accumulatedContent);
         await addMessage("assistant", accumulatedContent);
-        console.log("Assistant message saved to Supabase.");
+        await fetchMessages();
       }
 
       // If this is the first message in the thread, update the thread name
@@ -326,35 +337,124 @@ export function ChatInterface({
     let fullMessage = inputValue.trim();
     let userMessage: Message;
     if (file) {
-      // 1. Read the file content
       const formData = new FormData();
       formData.append('file', file);
+      let fileUrl = '';
       let fileText = "";
+      // 1. Upload file to Supabase Storage
       try {
-        const res = await fetch('/api/read-file', { method: 'POST', body: formData });
-        if (res.ok) {
-          const { text } = await res.json();
-          fileText = text;
-        }
+        const uploadRes = await fetch('/api/upload-image', { method: 'POST', body: formData });
+        const uploadData = await uploadRes.json();
+        if (!uploadRes.ok) throw new Error(uploadData.error || 'Failed to upload file');
+        fileUrl = uploadData.url;
       } catch (e) {
-         // handle error
+        toast({
+          title: 'File upload failed',
+          description: (e as Error).message,
+          variant: 'destructive',
+        });
+        setSendLocked(false);
+        setIsProcessing(false);
+        return;
       }
-      // 2. Construct the message content for UI only (no file content)
-      fullMessage = `Attached file (${file.name})\n\nUser query: ${inputValue.trim()}`;
-      userMessage = {
-         id: uuidv4(),
-         content: fullMessage,
-         type: "file",
-         role: "user",
-         timestamp: new Date(),
-         file: {
-           name: file.name,
-           type: file.type,
-           size: file.size,
-           url: URL.createObjectURL(file),
-         },
-         fileContent: fileText, // new property for backend/AI
-      };
+
+      if (isImageFile(file)) {
+        // 2. Send to vision API
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+          const base64 = (event.target?.result as string).split(',')[1];
+          const res = await fetch('/api/vision', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              imageBase64: base64,
+              userQuery: inputValue.trim()
+            })
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            throw new Error(data.error || 'Failed to process image');
+          }
+          // 3. Add user message and assistant response to chat
+          userMessage = {
+            id: uuidv4(),
+            content: `Attached image (${file.name})\n${inputValue.trim()}`,
+            type: "file",
+            role: "user",
+            timestamp: new Date(),
+            file: {
+              name: file.name,
+              type: file.type,
+              size: file.size,
+              url: fileUrl, // Use Supabase public URL
+            },
+            fileContent: fileText, // new property for backend/AI
+          };
+          // Debug log for file object
+          console.log('[actuallySendMessage] addMessage file object:', userMessage.file);
+          // Persist user message before AI call
+          if (addMessage && selectedThreadId && fetchMessages) {
+            await addMessage("user", userMessage.content, userMessage.file);
+            await fetchMessages();
+          }
+          // If this is the first message in the thread, update the thread name using the user's message
+          if (messages.length === 0 && selectedThreadId && onThreadNameUpdate) {
+            const newName = fullMessage.slice(0, 50); // Limit to 50 chars
+            onThreadNameUpdate(newName);
+          }
+          // Add assistant response
+          if (addMessage && selectedThreadId && fetchMessages) {
+            await addMessage("assistant", data.result, {
+              name: file.name,
+              type: file.type,
+              size: file.size,
+              url: fileUrl,
+            });
+            await fetchMessages();
+          }
+          setSendLocked(false);
+          setIsProcessing(false);
+          setInput("");
+          setSelectedFile(null);
+          if (fileInputRef.current) fileInputRef.current.value = "";
+        };
+        reader.readAsDataURL(file);
+        return;
+      } else {
+        // 2. Read the file content (for text files, etc.)
+        try {
+          const res = await fetch('/api/read-file', { method: 'POST', body: formData });
+          if (res.ok) {
+            const { text } = await res.json();
+            fileText = text;
+          }
+        } catch (e) {
+          // handle error
+        }
+        // 3. Construct the message content for UI only (no file content)
+        fullMessage = `Attached file (${file.name})\n${inputValue.trim()}`;
+        userMessage = {
+          id: uuidv4(),
+          content: fullMessage,
+          type: "file",
+          role: "user",
+          timestamp: new Date(),
+          file: {
+            name: file.name,
+            type: file.type,
+            size: file.size,
+            url: fileUrl, // Use Supabase public URL
+          },
+          fileContent: fileText, // new property for backend/AI
+        };
+        // Debug log for file object
+        console.log('[actuallySendMessage] addMessage file object:', userMessage.file);
+        // Persist user message before AI call
+        if (addMessage && selectedThreadId && fetchMessages) {
+          await addMessage("user", userMessage.content, userMessage.file);
+          await fetchMessages();
+        }
+      }
     } else {
       userMessage = {
          id: uuidv4(),
@@ -363,16 +463,19 @@ export function ChatInterface({
          role: "user",
          timestamp: new Date(),
       };
+      // Persist user message before AI call
+      if (addMessage && selectedThreadId && fetchMessages) {
+        await addMessage("user", userMessage.content);
+        await fetchMessages();
+      }
     }
-    // If this is the first message in the thread, update the thread name (using user message content)
+
+    // If this is the first message in the thread, update the thread name using the user's message
     if (messages.length === 0 && selectedThreadId && onThreadNameUpdate) {
        const newName = fullMessage.slice(0, 50); // Limit to 50 chars
        onThreadNameUpdate(newName);
     }
-    // Save the user message to Supabase (if addMessage is provided and a thread is selected)
-    if (addMessage && selectedThreadId) {
-       await addMessage("user", fullMessage);
-    }
+
     // Prepare the message history (including the new user message) to send to the AI
     const messageHistory = [...messages, userMessage];
     // Call the AI endpoint (only once per user message)
@@ -420,8 +523,9 @@ export function ChatInterface({
          }
        }
        // Save the assistant's response (accumulatedContent) to Supabase (if addMessage is provided and a thread is selected)
-       if (addMessage && selectedThreadId) {
+       if (addMessage && selectedThreadId && fetchMessages) {
          await addMessage("assistant", accumulatedContent || "[No response]");
+         await fetchMessages();
        }
     } catch (error) {
        toast({
@@ -492,6 +596,9 @@ export function ChatInterface({
     }
   }
 
+  // Debug: Log messages before rendering
+  console.log('[ChatInterface] messages before render:', messages);
+
   return (
     <div className="flex flex-col h-full chat-background relative">
       {/* Chat Header - Fixed position */}
@@ -527,8 +634,8 @@ export function ChatInterface({
         className="flex-1 overflow-y-auto p-4 pt-20 pb-24 space-y-4 scrollbar-w-2 scrollbar-track-blue-lighter scrollbar-thumb-blue scrollbar-thumb-rounded"
       >
         <div className="max-w-3xl mx-auto w-full">
-          {messages.map((message) => (
-            <div key={message.id} className="mb-6">
+          {messages.map((message, idx) => (
+            <div key={message.id || idx} className="mb-6">
               <ChatMessage message={message} />
             </div>
           ))}

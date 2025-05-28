@@ -8,6 +8,9 @@ import { cn } from "@/lib/utils"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
 
+// To fix old messages in Supabase, run this SQL (adjust as needed):
+// UPDATE messages SET file = jsonb_build_object('name', 'FILENAME', 'type', 'TYPE', 'size', SIZE, 'url', 'URL') WHERE file IS NOT NULL AND (file->>'name' IS NULL OR file->>'url' IS NULL);
+
 interface ChatMessageProps {
   message: Message
 }
@@ -21,7 +24,8 @@ interface PDFAnnotation {
 }
 
 // Utility to remove source references like [5:0†source], [5:0†day 1.txt], 【5:0†source】, or 【5:0†day 1.txt】
-function removeSources(text: string) {
+function removeSources(text: string | undefined) {
+  if (typeof text !== 'string') return '';
   // Remove all source references like [5:0†source], [5:0†day 1.txt], 【5:0†source】, or 【5:0†day 1.txt】
   let cleaned = text.replace(/(\[.*?†.*?\]|【.*?†.*?】)/g, "");
   // Remove any trailing whitespace
@@ -134,7 +138,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
   };
 
   const renderFilePreview = () => {
-    if (!message.file) return null;
+    if (!message.file || typeof message.file !== 'object' || !message.file.name || !message.file.type || !message.file.size || !message.file.url) return null;
 
     const fileType = message.file.type;
     
@@ -183,14 +187,14 @@ export function ChatMessage({ message }: ChatMessageProps) {
   }
 
   const renderMessageContent = () => {
-    if (message.type === "file" && message.file) {
+    if (message.type === "file" && message.file && typeof message.file === 'object' && message.file.name && message.file.type && message.file.size && message.file.url) {
       // Extract the user query from the message content
       let userQuery = "";
-      const match = message.content.match(/User query:([\s\S]*)$/);
+      const match = message.content && message.content.match(/User query:([\s\S]*)$/);
       if (match) {
         userQuery = match[1].trim();
       }
-      // Only show file name, size, and user query (never file content)
+      // Always show file info and preview, even if content is empty
       return (
         <div className="flex flex-col gap-2 w-full">
           <div className="flex items-center gap-2">
@@ -215,15 +219,17 @@ export function ChatMessage({ message }: ChatMessageProps) {
             </a>
           </div>
           {renderFilePreview()}
-          {/* Only show the user query, not the full file content */}
-          {userQuery && (
+          {/* Show user query if present, otherwise for images show a default label */}
+          {userQuery ? (
             <div className={cn(
               "mt-2 whitespace-pre-wrap break-words",
               isUser ? "text-black" : "text-black dark:text-black"
             )}>
               <span className="font-semibold">User query:</span> {userQuery}
             </div>
-          )}
+          ) : (message.file.type.includes('image') && !message.content) ? (
+            <div className="mt-2 text-black">Image uploaded by user</div>
+          ) : null}
         </div>
       );
     }
