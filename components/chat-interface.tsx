@@ -332,6 +332,65 @@ export function ChatInterface({
 
   // Move the message sending logic to a new function
   const actuallySendMessage = async (inputValue: string, file: File | null) => {
+    // Detect image generation prompt
+    if (
+      !file &&
+      /\b(generate|create)\b.*\bimage(s)?\b.*\bof\b/i.test(inputValue.trim())
+    ) {
+      setIsProcessing(true);
+      setSendLocked(true);
+
+      // Add the user's message to Supabase
+      if (addMessage && selectedThreadId) {
+        await addMessage("user", inputValue.trim(), undefined);
+      }
+
+      try {
+        const res = await fetch('/api/image', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt: inputValue.trim() }),
+        });
+        const data = await res.json();
+        if (data.url) {
+          // Add the assistant's image message to Supabase
+          if (addMessage && selectedThreadId) {
+            await addMessage("assistant", data.url, undefined);
+          }
+          // Optionally update UI state for immediate feedback (messages will be re-fetched)
+        } else {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: uuidv4(),
+              content: data.error || "Failed to generate image.",
+              type: "text",
+              role: "assistant",
+              timestamp: new Date(),
+            },
+          ]);
+        }
+        // Update thread name after image generation
+        if (onThreadNameUpdate) {
+          onThreadNameUpdate(inputValue.trim().slice(0, 50));
+        }
+      } catch (e) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: uuidv4(),
+            content: "Error generating image.",
+            type: "text",
+            role: "assistant",
+            timestamp: new Date(),
+          },
+        ]);
+      }
+      setIsProcessing(false);
+      setSendLocked(false);
+      setInput("");
+      return;
+    }
     setSendLocked(true);
     setIsProcessing(true);
     let fullMessage = inputValue.trim();
@@ -615,6 +674,13 @@ export function ChatInterface({
 
   // Debug: Log messages before rendering
   console.log('[ChatInterface] messages before render:', messages);
+
+  // Add or update this useEffect to fetch messages when selectedThreadId changes
+  useEffect(() => {
+    if (selectedThreadId && fetchMessages) {
+      fetchMessages();
+    }
+  }, [selectedThreadId]);
 
   return (
     <div className="flex flex-col h-full chat-background relative">

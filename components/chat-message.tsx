@@ -48,6 +48,13 @@ export function ChatMessage({ message }: ChatMessageProps) {
   const isAssistant = message.role === "assistant"
   const isSystem = message.role === "system"
 
+  // Move isGeneratedImage to the top level of ChatMessage so it can be used in both renderMessageContent and the main render
+  const isGeneratedImage =
+    message.imageUrl ||
+    (message.role === "assistant" &&
+      typeof message.content === "string" &&
+      message.content.match(/^https?:\/\/.*\.(png|jpg|jpeg|gif|webp|svg|bmp|tiff|ico|avif|apng)(\?.*)?$/i));
+
   const copyToClipboard = () => {
     navigator.clipboard.writeText(message.content)
     setCopied(true)
@@ -137,8 +144,9 @@ export function ChatMessage({ message }: ChatMessageProps) {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  // Restore renderFilePreview for file messages
   const renderFilePreview = () => {
-    if (!message.file || typeof message.file !== 'object' || !message.file.name || !message.file.type || !message.file.size || !message.file.url) return null;
+    if (!message.file?.name || !message.file?.type || !message.file?.size || !message.file?.url) return null;
 
     const fileType = message.file.type;
     
@@ -187,6 +195,66 @@ export function ChatMessage({ message }: ChatMessageProps) {
   }
 
   const renderMessageContent = () => {
+    // 1. Render generated images if present or if content is a valid image URL
+    if (isGeneratedImage) {
+      const imageUrl = message.imageUrl || message.content;
+      return (
+        <div className="flex flex-col items-center gap-2 w-full">
+          <img
+            src={imageUrl}
+            alt="Generated"
+            className="max-w-full h-auto rounded-lg"
+            style={{ maxHeight: "300px" }}
+          />
+          <Button
+            className="mt-2 inline-flex items-center px-3 py-1 bg-gray-200 rounded hover:bg-gray-300 text-black"
+            title="Download image"
+            onClick={async () => {
+              try {
+                const response = await fetch(imageUrl, { mode: 'cors' });
+                if (!response.ok) throw new Error('Network response was not ok');
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'generated-image.png';
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                window.URL.revokeObjectURL(url);
+              } catch (err) {
+                window.open(imageUrl, '_blank');
+                alert('Direct download is not supported for this image. Please right-click the image and choose "Save As..." to download.');
+              }
+            }}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V4" />
+            </svg>
+            Download
+          </Button>
+        </div>
+      );
+    }
+
+    // 2. If the assistant's message content is a valid image URL, render it as an image
+    if (
+      message.role === "assistant" &&
+      typeof message.content === "string" &&
+      message.content.match(/^https?:\/\/.*\.(png|jpg|jpeg|gif|webp|svg|bmp|tiff|ico|avif|apng)(\?.*)?$/i)
+    ) {
+      return (
+        <div className="flex flex-col items-center gap-2 w-full">
+          <img
+            src={message.content}
+            alt="Generated"
+            className="max-w-full h-auto rounded-lg"
+            style={{ maxHeight: "300px" }}
+          />
+        </div>
+      );
+    }
+
     if (message.type === "file" && message.file && typeof message.file === 'object' && message.file.name && message.file.type && message.file.size && message.file.url) {
       // Extract the user query from the message content
       let userQuery = "";
@@ -272,8 +340,8 @@ export function ChatMessage({ message }: ChatMessageProps) {
             }}
           >
             {renderMessageContent()}
-            {/* Copy icon for assistant messages */}
-            {isAssistant && (
+            {/* Only show the copy button for assistant text messages (not for generated images) */}
+            {isAssistant && !isGeneratedImage && (
               <button
                 onClick={handleCopy}
                 title={copied ? "Copied!" : "Copy response"}
