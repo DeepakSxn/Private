@@ -253,11 +253,19 @@ export function ChatInterface({
 
         recognitionRef.current.onerror = (event: SpeechRecognitionErrorEvent) => {
           console.error('Speech recognition error:', event.error)
-          toast({
-            title: "Voice Input Error",
-            description: "There was an error with voice recognition. Please try again.",
-            variant: "destructive",
-          })
+          if (event.error === 'network') {
+            toast({
+              title: "Speech Recognition Network Error",
+              description: "Network error. Please check your internet connection or try again later.",
+              variant: "destructive",
+            });
+          } else {
+            toast({
+              title: "Voice Input Error",
+              description: `There was an error with voice recognition: ${event.error}. Please try again.`,
+              variant: "destructive",
+            });
+          }
           setIsRecording(false)
         }
 

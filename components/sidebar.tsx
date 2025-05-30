@@ -4,7 +4,7 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
-import { Search, MoreHorizontal, Check, X, Menu, Plus, Upload } from "lucide-react"
+import { Search, MoreHorizontal, Check, X, Menu, Plus, Upload, FileText } from "lucide-react"
 import type { FileCategory } from "@/types/file"
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
@@ -84,15 +84,15 @@ export function Sidebar({
       {/* Main sidebar */}
       {isOpen && (
         <div
-          className="fixed top-16 left-0 w-[260px] h-[calc(100vh-4rem)] z-50 bg-background shadow-xl border-r border-border transition-transform duration-300"
-          style={{ transform: isOpen ? "translateX(0)" : "translateX(-100%)" }}
+          className="fixed top-16 left-0 w-[270px] h-[calc(100vh-4rem)] z-50 bg-white/70 dark:bg-zinc-900/70 shadow-2xl border-r border-border backdrop-blur-lg transition-transform duration-300 rounded-tr-3xl rounded-br-3xl"
+          style={{ transform: isOpen ? "translateX(0)" : "translateX(-100%)", boxShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.37)' }}
         >
           <div className="relative h-full flex flex-col w-full text-foreground dark:text-white">
             {/* Toggle button inside sidebar */}
             <Button
               variant="ghost"
               size="icon"
-              className="absolute -right-10 top-4 z-40 bg-background dark:bg-black border border-border dark:border-white/10 rounded-l-none shadow-md hover:bg-accent dark:hover:bg-white/10 text-foreground dark:text-white"
+              className="absolute -right-10 top-4 z-40 bg-white/80 dark:bg-zinc-900/80 border border-border dark:border-white/10 rounded-l-none shadow-lg hover:bg-accent/40 dark:hover:bg-white/10 text-foreground dark:text-white backdrop-blur"
               onClick={onToggleSidebar}
             >
               <Menu className="h-4 w-4" />
@@ -103,57 +103,54 @@ export function Sidebar({
             <div className="flex-none">
               {/* Tabs for Documents and Upload */}
               <Tabs defaultValue="documents" className="flex-none">
-                <div className="border-b border-border dark:border-white/10">
-                  <TabsList className="w-full flex flex-col h-auto p-0 bg-background dark:bg-black gap-4 mt-6">
-                    <TabsTrigger 
-                      value="documents" 
-                      className="w-full justify-start rounded-none border-b border-border dark:border-white/10 data-[state=active]:border-b-0 text-foreground dark:text-white data-[state=active]:bg-background dark:data-[state=active]:bg-black hover:bg-accent dark:hover:bg-white/5 text-sm group relative transition-colors duration-200"
+                <div className="mt-6">
+                  <TabsList className="w-full flex flex-col h-auto p-0 bg-transparent gap-3">
+                    <TabsTrigger
+                      value="documents"
+                      className={`
+                        w-full flex items-center gap-2 justify-start
+                        rounded-full px-5 py-3 font-bold text-base text-foreground dark:text-white
+                        transition-all duration-200
+                        shadow-none border-none outline-none ring-0
+                        bg-zinc-100/70 dark:bg-zinc-800/60
+                        hover:scale-[1.04] hover:bg-primary/10 dark:hover:bg-primary/10
+                        data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary/10 data-[state=active]:to-primary/5
+                        data-[state=active]:shadow-md data-[state=active]:text-primary
+                        dark:data-[state=active]:from-primary/20 dark:data-[state=active]:to-primary/10
+                      `}
                       onClick={() => router.push('/documents')}
                     >
-                      <div className="flex items-center gap-2">
-                        <span>Documents</span>
-                      </div>
-                      <div className="absolute inset-0 bg-accent/10 opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
+                      <FileText className="h-5 w-5" />
+                      <span>Documents</span>
                     </TabsTrigger>
-                    <TabsTrigger 
-                      value="upload" 
-                      className="w-full justify-start rounded-none text-foreground dark:text-white data-[state=active]:bg-background dark:data-[state=active]:bg-black hover:bg-accent dark:hover:bg-white/5 text-sm group relative transition-colors duration-200"
+                    <TabsTrigger
+                      value="upload"
+                      className={`
+                        w-full flex items-center gap-2 justify-start
+                        rounded-full px-5 py-3 font-bold text-base text-foreground dark:text-white
+                        transition-all duration-200
+                        shadow-none border-none outline-none ring-0
+                        bg-zinc-100/70 dark:bg-zinc-800/60
+                        hover:scale-[1.04] hover:bg-primary/10 dark:hover:bg-primary/10
+                        data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary/10 data-[state=active]:to-primary/5
+                        data-[state=active]:shadow-md data-[state=active]:text-primary
+                        dark:data-[state=active]:from-primary/20 dark:data-[state=active]:to-primary/10
+                      `}
                       onClick={() => router.push('/upload')}
                     >
-                      <div className="flex items-center gap-2">
-                        <Upload className="h-4 w-4" />
-                        <span>Upload</span>
-                      </div>
-                      <div className="absolute inset-0 bg-accent/10 opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
+                      <Upload className="h-5 w-5" />
+                      <span>Upload</span>
                     </TabsTrigger>
                   </TabsList>
                 </div>
-
-                <TabsContent 
-                  value="documents" 
-                  className="p-2 bg-background dark:bg-black border-b border-border dark:border-white/10"
-                >
-                  <div className="rounded-lg border border-border dark:border-white/10 bg-background dark:bg-black p-4">
-                    {/* Empty documents content */}
-                  </div>
-                </TabsContent>
-
-                <TabsContent 
-                  value="upload" 
-                  className="p-2 bg-background dark:bg-black border-b border-border dark:border-white/10"
-                >
-                  <div className="rounded-lg border border-border dark:border-white/10 bg-background dark:bg-black p-4">
-                    {/* Upload icon removed, tab is now empty */}
-                  </div>
-                </TabsContent>
               </Tabs>
 
               {/* New Chat Button */}
-              <div className="px-4 pt-2 pb-3 border-t border-border dark:border-white/10">
+              <div className="px-4 pt-2 pb-3">
                 <Button
                   variant="outline"
                   onClick={onNewChat}
-                  className="w-full justify-start gap-2 bg-background dark:bg-black hover:bg-accent text-foreground dark:text-white border-border dark:border-white/10"
+                  className="w-full justify-start gap-2 bg-white/60 dark:bg-zinc-900/60 hover:bg-primary/10 dark:hover:bg-primary/10 text-foreground dark:text-white border-border dark:border-white/10 rounded-xl shadow-sm"
                 >
                   <Plus className="h-4 w-4" />
                   New Chat
@@ -167,7 +164,7 @@ export function Sidebar({
                   <Input
                     type="search"
                     placeholder="Search conversations..."
-                    className="pl-8 bg-background dark:bg-black border-border dark:border-white/10 text-foreground dark:text-white placeholder:text-foreground dark:placeholder:text-white/50 focus-visible:ring-accent dark:focus-visible:ring-white/20"
+                    className="pl-8 bg-white/60 dark:bg-zinc-900/60 border-border dark:border-white/10 text-foreground dark:text-white placeholder:text-foreground dark:placeholder:text-white/50 focus-visible:ring-primary/30 dark:focus-visible:ring-primary/30 rounded-xl shadow-sm"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                   />
@@ -186,10 +183,10 @@ export function Sidebar({
                     filteredThreads.map((thread) => (
                       <div
                         key={thread.id}
-                        className={`group flex items-center justify-between rounded-lg px-3 py-2 transition-colors ${
+                        className={`group flex items-center justify-between rounded-xl px-3 py-2 transition-all shadow-sm border border-transparent ${
                           thread.id === selectedThreadId 
-                            ? 'bg-accent dark:bg-white/10 text-foreground dark:text-white' 
-                            : 'hover:bg-accent/10 dark:hover:bg-white/5 text-muted-foreground dark:text-white/70 hover:text-foreground dark:hover:text-white'
+                            ? 'bg-primary/10 dark:bg-primary/20 text-foreground dark:text-white border-primary/40 dark:border-primary/40 scale-[1.03]' 
+                            : 'hover:bg-primary/5 dark:hover:bg-primary/10 text-muted-foreground dark:text-white/70 hover:text-foreground dark:hover:text-white border-border/30 dark:border-white/10'
                         }`}
                         onClick={(e) => {
                           if (!(e.target as HTMLElement).closest('[data-dropdown-trigger]')) {
@@ -202,7 +199,7 @@ export function Sidebar({
                           <DropdownMenuTrigger asChild>
                             <button 
                               data-dropdown-trigger
-                              className="ml-2 p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity hover:bg-accent/20 text-foreground dark:hover:bg-white/10" 
+                              className="ml-2 p-1 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity hover:bg-primary/10 dark:hover:bg-primary/20 text-foreground dark:hover:bg-white/10" 
                               onClick={(e) => e.stopPropagation()}
                             >
                               <MoreHorizontal className="w-4 h-4" />
@@ -210,7 +207,7 @@ export function Sidebar({
                           </DropdownMenuTrigger>
                           <DropdownMenuContent 
                             align="end" 
-                            className="w-56 bg-background dark:bg-black border-border dark:border-white/10 text-foreground dark:text-white"
+                            className="w-56 bg-white/90 dark:bg-zinc-900/90 border-border dark:border-white/10 text-foreground dark:text-white shadow-xl rounded-xl"
                             onClick={(e) => e.stopPropagation()}
                           >
                             <DropdownMenuItem 
@@ -218,7 +215,7 @@ export function Sidebar({
                                 e.stopPropagation();
                                 handleRenameClick(thread);
                               }}
-                              className="text-foreground dark:text-white hover:bg-accent/10 focus:bg-accent/20"
+                              className="text-foreground dark:text-white hover:bg-primary/10 focus:bg-primary/20 rounded-lg"
                             >
                               Rename
                             </DropdownMenuItem>
@@ -227,7 +224,7 @@ export function Sidebar({
                                 e.stopPropagation();
                                 onDeleteThread && onDeleteThread(thread.id);
                               }}
-                              className="text-red-400 hover:bg-accent/10 focus:bg-accent/20 focus:text-red-400"
+                              className="text-red-400 hover:bg-red-100/60 dark:hover:bg-red-900/40 focus:bg-red-200/60 focus:text-red-400 rounded-lg"
                             >
                               Delete
                             </DropdownMenuItem>
@@ -250,7 +247,7 @@ export function Sidebar({
       {/* Mobile overlay */}
       {isOpen && (
         <div 
-          className="fixed inset-0 bg-background/80 backdrop-blur-sm z-20 md:hidden"
+          className="fixed inset-0 bg-black/30 backdrop-blur-md z-20 md:hidden"
           onClick={onToggleSidebar}
         />
       )}

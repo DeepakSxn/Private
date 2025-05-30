@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
     const { data, error } = await supabase.storage
       .from('chat-images')
       .upload(fileName, file, {
-        cacheControl: '3600',
+        cacheControl: '31536000',
         upsert: false,
         contentType: file.type,
       });
@@ -35,7 +35,13 @@ export async function POST(req: NextRequest) {
       console.error('[upload-image] Supabase getPublicUrl error: No public URL found');
       return NextResponse.json({ error: 'No public URL found' }, { status: 500 });
     }
-    return NextResponse.json({ url: publicUrlData.publicUrl });
+    return NextResponse.json({ url: publicUrlData.publicUrl }, {
+      headers: {
+        'Cache-Control': 'public, max-age=31536000',
+        'CDN-Cache-Control': 'public, max-age=31536000',
+        'Vercel-CDN-Cache-Control': 'public, max-age=31536000'
+      }
+    });
   } catch (err: any) {
     console.error('[upload-image] Unexpected error:', err);
     return NextResponse.json({ error: err.message || 'Failed to upload image', details: err }, { status: 500 });
