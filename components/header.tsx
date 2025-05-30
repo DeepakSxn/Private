@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { useState, useEffect } from "react"
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
 import { useTheme } from "next-themes"
+import { useRouter } from "next/navigation"
 
 interface HeaderProps {
   systemStatus: SystemStatus
@@ -18,9 +19,15 @@ export function Header({ systemStatus, toggleSidebar }: HeaderProps) {
   const [profileImage, setProfileImage] = useState<string | null>(null)
   const { theme } = useTheme();
   const [mounted, setMounted] = useState(false);
+  const router = useRouter();
 
   useEffect(() => {
     setMounted(true);
+    // Load profile image from localStorage on component mount
+    const savedImage = localStorage.getItem('profileImage');
+    if (savedImage) {
+      setProfileImage(savedImage);
+    }
   }, []);
 
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -28,14 +35,19 @@ export function Header({ systemStatus, toggleSidebar }: HeaderProps) {
     if (file) {
       const reader = new FileReader()
       reader.onloadend = () => {
-        setProfileImage(reader.result as string)
+        const imageData = reader.result as string;
+        setProfileImage(imageData);
+        // Save to localStorage
+        localStorage.setItem('profileImage', imageData);
       }
       reader.readAsDataURL(file)
     }
   }
 
   const handleRemoveImage = () => {
-    setProfileImage(null)
+    setProfileImage(null);
+    // Remove from localStorage
+    localStorage.removeItem('profileImage');
   }
 
   return (
@@ -46,13 +58,15 @@ export function Header({ systemStatus, toggleSidebar }: HeaderProps) {
             <img
               src={theme === 'dark' ? '/dark.webp' : '/light.webp'}
               alt="Logo"
-              className="h-10 w-auto"
+              className="h-10 w-auto cursor-pointer"
+              onClick={() => router.push('/')}
             />
           ) : (
             <img
               src="/light.webp"
               alt="Logo"
-              className="h-10 w-auto"
+              className="h-10 w-auto cursor-pointer"
+              onClick={() => router.push('/')}
             />
           )}
         </div>

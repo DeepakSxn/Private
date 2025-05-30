@@ -70,6 +70,8 @@ export function ChatInterface({
     input: string;
     selectedFile: File | null;
   } | null>(null)
+  const [lastSendTime, setLastSendTime] = useState(0)
+  const [isCreatingThread, setIsCreatingThread] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messageContainerRef = useRef<HTMLDivElement>(null)
@@ -327,11 +329,20 @@ export function ChatInterface({
   // Refactor handleSendMessage to use pending logic
   const handleSendMessage = async () => {
     if (sendLocked || isProcessing || (!input.trim() && !selectedFile)) return;
+    
+    // Prevent multiple thread creations
+    if (isCreatingThread) return;
+    
     if (!selectedThreadId && createThread && setSelectedThreadId) {
-      // No thread: create one and store pending message
-      setPendingMessage({ input, selectedFile });
-      const newThread = await createThread("New Chat");
-      if (newThread.id) setSelectedThreadId(newThread.id);
+      try {
+        setIsCreatingThread(true);
+        // No thread: create one and store pending message
+        setPendingMessage({ input, selectedFile });
+        const newThread = await createThread("New Chat");
+        if (newThread.id) setSelectedThreadId(newThread.id);
+      } finally {
+        setIsCreatingThread(false);
+      }
       return;
     }
     // Thread exists: send immediately
@@ -629,7 +640,10 @@ export function ChatInterface({
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      if (!sendLocked && !isProcessing) {
+      const now = Date.now();
+      // Prevent multiple sends within 1 second
+      if (!sendLocked && !isProcessing && !isCreatingThread && now - lastSendTime > 1000) {
+        setLastSendTime(now);
         handleSendMessage();
       }
     }
