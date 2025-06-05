@@ -8,8 +8,8 @@ export default function Home() {
       <img
         src="/light.webp"
         alt="EOXS Logo"
-        className="absolute top-4 left-4 h-10 w-auto sm:h-14"
-        style={{ maxWidth: "40vw" }}
+        className="absolute top-4 left-4 h-8 w-auto sm:h-10"
+        style={{ maxWidth: "30vw" }}
       />
 
       <main className="z-10 flex flex-col items-center w-full pt-20">

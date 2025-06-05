@@ -101,49 +101,25 @@ export function Sidebar({
 
             {/* Fixed header section */}
             <div className="flex-none">
-              {/* Tabs for Documents and Upload */}
-              <Tabs defaultValue="documents" className="flex-none">
-                <div className="mt-6">
-                  <TabsList className="w-full flex flex-col h-auto p-0 bg-transparent gap-3">
-                    <TabsTrigger
-                      value="documents"
-                      className={`
-                        w-full flex items-center gap-2 justify-start
-                        rounded-full px-5 py-3 font-bold text-base text-foreground dark:text-white
-                        transition-all duration-200
-                        shadow-none border-none outline-none ring-0
-                        bg-zinc-100/70 dark:bg-zinc-800/60
-                        hover:scale-[1.04] hover:bg-primary/10 dark:hover:bg-primary/10
-                        data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary/10 data-[state=active]:to-primary/5
-                        data-[state=active]:shadow-md data-[state=active]:text-primary
-                        dark:data-[state=active]:from-primary/20 dark:data-[state=active]:to-primary/10
-                      `}
-                      onClick={() => router.push('/documents')}
-                    >
-                      <FileText className="h-5 w-5" />
-                      <span>Documents</span>
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="upload"
-                      className={`
-                        w-full flex items-center gap-2 justify-start
-                        rounded-full px-5 py-3 font-bold text-base text-foreground dark:text-white
-                        transition-all duration-200
-                        shadow-none border-none outline-none ring-0
-                        bg-zinc-100/70 dark:bg-zinc-800/60
-                        hover:scale-[1.04] hover:bg-primary/10 dark:hover:bg-primary/10
-                        data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary/10 data-[state=active]:to-primary/5
-                        data-[state=active]:shadow-md data-[state=active]:text-primary
-                        dark:data-[state=active]:from-primary/20 dark:data-[state=active]:to-primary/10
-                      `}
-                      onClick={() => router.push('/upload')}
-                    >
-                      <Upload className="h-5 w-5" />
-                      <span>Upload</span>
-                    </TabsTrigger>
-                  </TabsList>
-                </div>
-              </Tabs>
+              {/* Documents and Upload Buttons */}
+              <div className="px-4 pt-2 pb-3">
+                <Button
+                  variant="outline"
+                  onClick={() => router.push('/documents')}
+                  className="w-full justify-start gap-2 bg-white/60 dark:bg-zinc-900/60 hover:bg-primary/10 dark:hover:bg-primary/10 text-foreground dark:text-white border-border dark:border-white/10 rounded-xl shadow-sm mb-2"
+                >
+                  <FileText className="h-4 w-4" />
+                  Documents
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => router.push('/upload')}
+                  className="w-full justify-start gap-2 bg-white/60 dark:bg-zinc-900/60 hover:bg-primary/10 dark:hover:bg-primary/10 text-foreground dark:text-white border-border dark:border-white/10 rounded-xl shadow-sm"
+                >
+                  <Upload className="h-4 w-4" />
+                  Upload
+                </Button>
+              </div>
 
               {/* New Chat Button */}
               <div className="px-4 pt-2 pb-3">

@@ -82,5 +82,11 @@
     "original_file_id": "file-Fwo5VPmmqLTrwsrknNjXJm",
     "filename": "1st knowledge data of joe.pdf",
     "created_at": 1748583790533
+  },
+  {
+    "vector_store_file_id": "file-CDzy2XMi673WxvasxyfUh3",
+    "original_file_id": "file-CDzy2XMi673WxvasxyfUh3",
+    "filename": "RESUME.pdf",
+    "created_at": 1749136833865
   }
 ]
