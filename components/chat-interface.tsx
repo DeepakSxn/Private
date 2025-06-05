@@ -506,6 +506,24 @@ export function ChatInterface({
           if (res.ok) {
             const { text } = await res.json();
             fileText = text;
+            // If the file is an Excel file, convert CSV to Markdown table and truncate to 20 rows
+            if (file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || file.name.endsWith('.xlsx')) {
+              function csvToMarkdownTable(csv: string, maxRows: number = 20): string {
+                const rows: string[] = csv.trim().split(/\r?\n/).slice(0, maxRows);
+                if (rows.length === 0) return '';
+                const cells: string[][] = rows.map((row: string) => row.split(','));
+                // Pad all rows to the same length
+                const colCount: number = Math.max(...cells.map((r: string[]) => r.length));
+                const padded: string[][] = cells.map((r: string[]) => r.concat(Array(colCount - r.length).fill('')));
+                // Build header and separator
+                const header: string = padded[0].map((cell: string) => cell.trim()).join(' | ');
+                const separator: string = Array(colCount).fill('---').join(' | ');
+                const body: string = padded.slice(1).map((r: string[]) => r.map((cell: string) => cell.trim()).join(' | ')).join('\n');
+                return `| ${header} |\n| ${separator} |\n${body ? '| ' + body.split('\n').join(' |\n| ') + ' |' : ''}`;
+              }
+              const markdownTable = csvToMarkdownTable(fileText, 20);
+              fileText = 'This is the content of an Excel spreadsheet. Please summarize or analyze the data below. Only the first 20 rows are shown.\n\n' + markdownTable;
+            }
           }
         } catch (e) {
           // handle error

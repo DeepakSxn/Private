@@ -66,9 +66,11 @@
     "tailwind-merge": "^2.5.5",
     "tailwindcss-animate": "^1.0.7",
     "tesseract.js": "^6.0.1",
+    "textract": "^2.5.0",
     "uuid": "^11.1.0",
     "vaul": "^0.9.6",
     "ws": "latest",
+    "xlsx": "^0.18.5",
     "zod": "^3.24.1"
   },
   "devDependencies": {
@@ -77,6 +79,7 @@
     "@types/node": "^22",
     "@types/react": "^19.1.5",
     "@types/react-dom": "^19.1.5",
+    "@types/textract": "^2.4.5",
     "@types/uuid": "^10.0.0",
     "postcss": "^8",
     "tailwindcss": "^3.4.17",

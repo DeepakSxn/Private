@@ -17,7 +17,7 @@ export async function POST(req: Request) {
     const lastMessage = messages[messages.length - 1]
 
     // --- If file is attached: Use only file content and user query with Chat API ---
-    if (lastMessage.content?.startsWith("Attached file (")) {
+    if (lastMessage.content?.startsWith("Attached file (") && lastMessage.file?.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') {
       // Prefer fileContent property if present
       let fileContent = lastMessage.fileContent;
 
@@ -25,18 +25,30 @@ export async function POST(req: Request) {
       if (!fileContent && lastMessage.file?.url) {
         const res = await fetch(lastMessage.file.url);
         if (!res.ok) throw new Error('Failed to fetch file from storage');
-        // Handle text files; for binary, you may want to use arrayBuffer/base64
         fileContent = await res.text();
+      }
+
+      // Truncate fileContent if too large
+      const maxLength = 6000;
+      if (fileContent && fileContent.length > maxLength) {
+        fileContent = fileContent.slice(0, maxLength) + '\n... (truncated)';
       }
 
       // Extract everything after the first line (file attachment line) as the user query
       const lines = lastMessage.content.split('\n');
       const userQuery = lines.slice(1).join('\n').trim();
 
+      let systemPrompt = '';
+      if (fileContent && fileContent.trim().startsWith('|')) {
+        systemPrompt = `You are an AI assistant. The following is the content of a spreadsheet, formatted as a Markdown table. Please summarize or analyze the data, and answer the user's question.\n\nFile content:\n${fileContent}`;
+      } else {
+        systemPrompt = `You are an AI assistant. Use ONLY the following file content to answer the user's question. File content:\n${fileContent}`;
+      }
+
       const promptMessages: OpenAI.ChatCompletionMessageParam[] = [
         {
           role: "system",
-          content: `You are an AI assistant. Use ONLY the following file content to answer the user's question. File content:\n${fileContent}`
+          content: systemPrompt
         },
         {
           role: "user",
