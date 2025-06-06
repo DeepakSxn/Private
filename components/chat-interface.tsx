@@ -14,6 +14,8 @@ import { Label } from "@/components/ui/label"
 import { useToast } from "@/hooks/use-toast"
 import { v4 as uuidv4 } from 'uuid'
 import type { SpeechRecognition, SpeechRecognitionEvent, SpeechRecognitionErrorEvent } from "@/types/speech-recognition"
+import mammoth from "mammoth"
+import * as XLSX from "xlsx"
 
 interface ChatInterfaceProps {
   onStatusChange: (status: SystemStatus) => void
@@ -44,6 +46,19 @@ function debounce(fn: (...args: any[]) => void, delay: number) {
 // Helper to check if file is an image
 function isImageFile(file: File | null | undefined) {
   return file && file.type.startsWith('image/');
+}
+
+// Utility function to convert CSV to Markdown table
+function csvToMarkdownTable(csv: string, maxRows: number = 20): string {
+  const rows: string[] = csv.trim().split(/\r?\n/).slice(0, maxRows);
+  if (rows.length === 0) return '';
+  const cells: string[][] = rows.map((row: string) => row.split(','));
+  const colCount: number = Math.max(...cells.map((r: string[]) => r.length));
+  const padded: string[][] = cells.map((r: string[]) => r.concat(Array(colCount - r.length).fill('')));
+  const header: string = padded[0].map((cell: string) => cell.trim()).join(' | ');
+  const separator: string = Array(colCount).fill('---').join(' | ');
+  const body: string = padded.slice(1).map((r: string[]) => r.map((cell: string) => cell.trim()).join(' | ')).join('\n');
+  return `| ${header} |\n| ${separator} |\n${body ? '| ' + body.split('\n').join(' |\n| ') + ' |' : ''}`;
 }
 
 export function ChatInterface({ 
@@ -79,6 +94,8 @@ export function ChatInterface({
   const { toast } = useToast()
   const prevThreadIdRef = useRef<string | undefined>(selectedThreadId)
   const abortControllerRef = useRef<AbortController | null>(null)
+  const [isDragActive, setIsDragActive] = useState(false)
+  const [fileText, setFileText] = useState<string>("")
 
   const sendMessageAndGetAIResponse = async (userMessageContent: string) => {
     let threadId = selectedThreadId;
@@ -193,7 +210,13 @@ export function ChatInterface({
         await addMessage("assistant", accumulatedContent);
         // Remove temporary message and fetch fresh messages
         setMessages((prev) => prev.filter(msg => !msg.id.startsWith('temp-')));
-        await fetchMessages();
+        try {
+          await fetchMessages();
+        } finally {
+          setIsProcessing(false);
+          setIsStreaming(false);
+          setSendLocked(false);
+        }
       }
 
       // If this is the first message in the thread, update the thread name
@@ -222,6 +245,7 @@ export function ChatInterface({
       setIsStreaming(false)
       abortControllerRef.current = null
       onStatusChange({ status: "connected", message: "System ready" })
+      setSendLocked(false)
     }
   };
 
@@ -292,7 +316,7 @@ export function ChatInterface({
     }
   }, [toast])
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
       // Check file size (10MB limit)
@@ -305,6 +329,25 @@ export function ChatInterface({
         return
       }
       setSelectedFile(file)
+      console.log('File selected:', file)
+      // If docx, extract text and store in fileText
+      if (file.name.endsWith('.docx') || file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+        const arrayBuffer = await file.arrayBuffer();
+        const { value: docxText } = await mammoth.extractRawText({ arrayBuffer });
+        setFileText(docxText);
+        console.log('Extracted DOCX text:', docxText);
+      }
+      // If xlsx, extract content and store in fileText as Markdown table
+      if (file.name.endsWith('.xlsx') || file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') {
+        const arrayBuffer = await file.arrayBuffer();
+        const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const csv: string = XLSX.utils.sheet_to_csv(worksheet);
+        const markdownTable = csvToMarkdownTable(csv, 20);
+        setFileText('This is the content of an Excel spreadsheet. Please summarize or analyze the data below. Only the first 20 rows are shown.\n\n' + markdownTable);
+        console.log('Extracted XLSX markdown table:', markdownTable);
+      }
     }
   }
 
@@ -343,17 +386,15 @@ export function ChatInterface({
   // Refactor handleSendMessage to use pending logic
   const handleSendMessage = async () => {
     if (sendLocked || isProcessing || (!input.trim() && !selectedFile)) return;
-    
     // Prevent multiple thread creations
     if (isCreatingThread) return;
-    
     if (!selectedThreadId && createThread && setSelectedThreadId) {
       try {
         setIsCreatingThread(true);
-        // No thread: create one and store pending message
         setPendingMessage({ input, selectedFile });
         const newThread = await createThread("New Chat");
         if (newThread.id) setSelectedThreadId(newThread.id);
+        setInput(""); // <-- Clear input after creating thread
       } finally {
         setIsCreatingThread(false);
       }
@@ -361,6 +402,7 @@ export function ChatInterface({
     }
     // Thread exists: send immediately
     actuallySendMessage(input, selectedFile);
+    setInput(""); // <-- Clear input after sending
   };
 
   // Move the message sending logic to a new function
@@ -421,7 +463,20 @@ export function ChatInterface({
       }
       setIsProcessing(false);
       setSendLocked(false);
+      setIsStreaming(false);
       setInput("");
+      setSelectedFile(null);
+      abortControllerRef.current = null;
+      if (fetchMessages) {
+        setMessages((prev) => prev.filter(msg => !msg.id.startsWith('temp-')));
+        try {
+          await fetchMessages();
+        } finally {
+          setIsProcessing(false);
+          setIsStreaming(false);
+          setSendLocked(false);
+        }
+      }
       return;
     }
     setSendLocked(true);
@@ -435,7 +490,8 @@ export function ChatInterface({
         formData.append('thread_id', selectedThreadId);
       }
       let fileUrl = '';
-      let fileText = "";
+      let fileTextToSend = fileText || "";
+      console.log('fileTextToSend before sending:', fileTextToSend);
       // 1. Upload file to Supabase Storage
       try {
         const uploadRes = await fetch('/api/upload-image', { method: 'POST', body: formData });
@@ -471,8 +527,9 @@ export function ChatInterface({
             throw new Error(data.error || 'Failed to process image');
           }
           // 3. Add user message and assistant response to chat
+          const tempUserId = `temp-${uuidv4()}`;
           userMessage = {
-            id: uuidv4(),
+            id: tempUserId,
             content: `Attached image (${file.name})\n${inputValue.trim()}`,
             type: "file",
             role: "user",
@@ -483,66 +540,73 @@ export function ChatInterface({
               size: file.size,
               url: fileUrl, // Use Supabase public URL
             },
-            fileContent: fileText, // new property for backend/AI
+            fileContent: fileTextToSend, // new property for backend/AI
           };
+          // Optimistically add the user's file message to the chat area immediately
+          setMessages((prev) => [...prev, userMessage]);
           // Debug log for file object
           console.log('[actuallySendMessage] addMessage file object:', userMessage.file);
           // Persist user message before AI call
           if (addMessage && selectedThreadId && fetchMessages) {
             await addMessage("user", userMessage.content, userMessage.file);
-            await fetchMessages();
+            try {
+              await fetchMessages();
+            } finally {
+              setIsProcessing(false);
+              setIsStreaming(false);
+              setSendLocked(false);
+            }
           }
           // Clear file from input area immediately after sending
           setSelectedFile(null);
+          setFileText("");
           if (fileInputRef.current) fileInputRef.current.value = "";
           // If this is the first message in the thread, update the thread name using the user's message
           if (messages.length === 0 && selectedThreadId && onThreadNameUpdate) {
             const newName = fullMessage.slice(0, 50); // Limit to 50 chars
             onThreadNameUpdate(newName);
           }
-          // Add assistant response
+          // After backend/AI response and before adding fetched messages, filter out temp messages
           if (fetchMessages) {
-            fetchMessages();
+            setMessages((prev) => prev.filter(msg => !msg.id.startsWith('temp-')));
+            try {
+              await fetchMessages();
+            } finally {
+              setIsProcessing(false);
+              setIsStreaming(false);
+              setSendLocked(false);
+            }
           }
           setSendLocked(false);
           setIsProcessing(false);
+          setIsStreaming(false);
           setInput("");
         };
         reader.readAsDataURL(file);
         return;
       } else {
-        // 2. Read the file content (for text files, etc.)
-        try {
-          const res = await fetch('/api/read-file', { method: 'POST', body: formData });
-          if (res.ok) {
-            const { text } = await res.json();
-            fileText = text;
-            // If the file is an Excel file, convert CSV to Markdown table and truncate to 20 rows
-            if (file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || file.name.endsWith('.xlsx')) {
-              function csvToMarkdownTable(csv: string, maxRows: number = 20): string {
-                const rows: string[] = csv.trim().split(/\r?\n/).slice(0, maxRows);
-                if (rows.length === 0) return '';
-                const cells: string[][] = rows.map((row: string) => row.split(','));
-                // Pad all rows to the same length
-                const colCount: number = Math.max(...cells.map((r: string[]) => r.length));
-                const padded: string[][] = cells.map((r: string[]) => r.concat(Array(colCount - r.length).fill('')));
-                // Build header and separator
-                const header: string = padded[0].map((cell: string) => cell.trim()).join(' | ');
-                const separator: string = Array(colCount).fill('---').join(' | ');
-                const body: string = padded.slice(1).map((r: string[]) => r.map((cell: string) => cell.trim()).join(' | ')).join('\n');
-                return `| ${header} |\n| ${separator} |\n${body ? '| ' + body.split('\n').join(' |\n| ') + ' |' : ''}`;
-              }
-              const markdownTable = csvToMarkdownTable(fileText, 20);
-              fileText = 'This is the content of an Excel spreadsheet. Please summarize or analyze the data below. Only the first 20 rows are shown.\n\n' + markdownTable;
+        // For docx and xlsx, use the extracted fileText from the frontend and skip /api/read-file
+        if (
+          file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || file.name.endsWith('.docx') ||
+          file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || file.name.endsWith('.xlsx')
+        ) {
+          // fileTextToSend is already set from frontend extraction
+        } else {
+          try {
+            const res = await fetch('/api/read-file', { method: 'POST', body: formData });
+            if (res.ok) {
+              const { text } = await res.json();
+              fileTextToSend = text;
             }
+          } catch (e) {
+            // handle error
           }
-        } catch (e) {
-          // handle error
         }
         // 3. Construct the message content for UI only (no file content)
         fullMessage = `Attached file (${file.name})\n${inputValue.trim()}`;
+        const tempUserId = `temp-${uuidv4()}`;
         userMessage = {
-          id: uuidv4(),
+          id: tempUserId,
           content: fullMessage,
           type: "file",
           role: "user",
@@ -553,31 +617,49 @@ export function ChatInterface({
             size: file.size,
             url: fileUrl, // Use Supabase public URL
           },
-          fileContent: fileText, // new property for backend/AI
+          fileContent: fileTextToSend, // new property for backend/AI
         };
+        // Optimistically add the user's file message to the chat area immediately
+        setMessages((prev) => [...prev, userMessage]);
         // Debug log for file object
         console.log('[actuallySendMessage] addMessage file object:', userMessage.file);
         // Persist user message before AI call
         if (addMessage && selectedThreadId && fetchMessages) {
           await addMessage("user", userMessage.content, userMessage.file);
-          await fetchMessages();
+          try {
+            await fetchMessages();
+          } finally {
+            setIsProcessing(false);
+            setIsStreaming(false);
+            setSendLocked(false);
+          }
         }
         // Clear file from input area immediately after sending
         setSelectedFile(null);
+        setFileText("");
         if (fileInputRef.current) fileInputRef.current.value = "";
       }
     } else {
+      const tempUserId = `temp-${uuidv4()}`;
       userMessage = {
-         id: uuidv4(),
+         id: tempUserId,
          content: fullMessage,
          type: "text",
          role: "user",
          timestamp: new Date(),
       };
+      // Optimistically add the user's text message to the chat area immediately
+      setMessages((prev) => [...prev, userMessage]);
       // Persist user message before AI call
       if (addMessage && selectedThreadId && fetchMessages) {
         await addMessage("user", userMessage.content);
-        await fetchMessages();
+        try {
+          await fetchMessages();
+        } finally {
+          setIsProcessing(false);
+          setIsStreaming(false);
+          setSendLocked(false);
+        }
       }
     }
 
@@ -649,7 +731,14 @@ export function ChatInterface({
       setSelectedFile(null);
       abortControllerRef.current = null;
       if (fetchMessages) {
-        fetchMessages();
+        setMessages((prev) => prev.filter(msg => !msg.id.startsWith('temp-')));
+        try {
+          await fetchMessages();
+        } finally {
+          setIsProcessing(false);
+          setIsStreaming(false);
+          setSendLocked(false);
+        }
       }
     } catch (error: any) {
       if (error.name === 'AbortError' || (abortControllerRef.current && abortControllerRef.current.signal.aborted)) {
@@ -742,6 +831,65 @@ export function ChatInterface({
     }
   }, [selectedThreadId]);
 
+  // Filter out temp messages before rendering
+  const filteredMessages = messages.filter(msg => !msg.id.startsWith('temp-'));
+
+  // Drag and drop handlers for file upload
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragActive(true);
+  };
+
+  const handleDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragActive(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragActive(false);
+  };
+
+  const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragActive(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      if (file.size > 10 * 1024 * 1024) {
+        toast({
+          title: "File too large",
+          description: "Please select a file smaller than 10MB",
+          variant: "destructive",
+        });
+        return;
+      }
+      setSelectedFile(file);
+      console.log('File selected (drag-and-drop):', file);
+      // If docx, extract text and store in fileText
+      if (file.name.endsWith('.docx') || file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+        const arrayBuffer = await file.arrayBuffer();
+        const { value: docxText } = await mammoth.extractRawText({ arrayBuffer });
+        setFileText(docxText);
+        console.log('Extracted DOCX text:', docxText);
+      }
+      // If xlsx, extract content and store in fileText as Markdown table
+      if (file.name.endsWith('.xlsx') || file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') {
+        const arrayBuffer = await file.arrayBuffer();
+        const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const csv: string = XLSX.utils.sheet_to_csv(worksheet);
+        const markdownTable = csvToMarkdownTable(csv, 20);
+        setFileText('This is the content of an Excel spreadsheet. Please summarize or analyze the data below. Only the first 20 rows are shown.\n\n' + markdownTable);
+        console.log('Extracted XLSX markdown table:', markdownTable);
+      }
+    }
+  };
+
   return (
     <div className="flex flex-col h-full chat-background relative">
       {/* Chat Header - Fixed position */}
@@ -777,7 +925,7 @@ export function ChatInterface({
         className="flex-1 overflow-y-auto p-4 pt-24 pb-28 space-y-4 scrollbar-w-2 scrollbar-track-blue-lighter scrollbar-thumb-blue scrollbar-thumb-rounded"
       >
         <div className="max-w-2xl mx-auto w-full">
-          {messages.map((message, idx) => {
+          {filteredMessages.map((message, idx) => {
             // Handle both string and Date timestamps
             const timestamp = message.timestamp instanceof Date 
               ? message.timestamp.getTime() 
@@ -811,7 +959,14 @@ export function ChatInterface({
           </div>
         )}
 
-        <div className="max-w-2xl mx-auto w-full">
+        <div
+          onDragOver={handleDragOver}
+          onDragEnter={handleDragEnter}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          className={`max-w-2xl mx-auto w-full ${isDragActive ? 'border-2 border-primary bg-primary/10' : ''}`}
+        >
+          {/* Always show the selected file preview if a file is attached */}
           {selectedFile && (
             <div className="mb-2 flex items-center gap-2 p-2 bg-muted rounded-lg">
               <FileText className="h-4 w-4 text-primary" />
@@ -850,7 +1005,7 @@ export function ChatInterface({
                 variant="ghost"
                 size="icon"
                 onClick={handleAttachFile}
-                disabled={sendLocked || isProcessing}
+                disabled={isProcessing}
                 title="Attach file"
                 className="text-gray-500 hover:text-gray-700"
               >
@@ -896,6 +1051,12 @@ export function ChatInterface({
           </div>
         </div>
       </div>
+
+      {isDragActive && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-primary/20 border-2 border-primary rounded-2xl pointer-events-none">
+          <span className="text-primary text-lg font-semibold">Drop file to attach</span>
+        </div>
+      )}
     </div>
   )
 }

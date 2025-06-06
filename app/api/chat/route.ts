@@ -16,35 +16,25 @@ export async function POST(req: Request) {
     const { messages } = await req.json()
     const lastMessage = messages[messages.length - 1]
 
-    // --- If file is attached: Use only file content and user query with Chat API ---
-    if (lastMessage.content?.startsWith("Attached file (") && lastMessage.file?.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') {
-      // Prefer fileContent property if present
-      let fileContent = lastMessage.fileContent;
-
-      // If fileContent is missing but file.url is present, fetch it
-      if (!fileContent && lastMessage.file?.url) {
-        const res = await fetch(lastMessage.file.url);
-        if (!res.ok) throw new Error('Failed to fetch file from storage');
-        fileContent = await res.text();
-      }
-
+    // --- If file is attached and fileContent is present: Use file content and user query with Chat API ---
+    if (
+      lastMessage.content?.startsWith("Attached file (") &&
+      lastMessage.fileContent &&
+      typeof lastMessage.fileContent === "string" &&
+      lastMessage.fileContent.trim().length > 0
+    ) {
+      let fileContent = lastMessage.fileContent || (lastMessage.file && lastMessage.file.fileContent);
       // Truncate fileContent if too large
       const maxLength = 6000;
       if (fileContent && fileContent.length > maxLength) {
         fileContent = fileContent.slice(0, maxLength) + '\n... (truncated)';
       }
-
       // Extract everything after the first line (file attachment line) as the user query
       const lines = lastMessage.content.split('\n');
       const userQuery = lines.slice(1).join('\n').trim();
-
-      let systemPrompt = '';
-      if (fileContent && fileContent.trim().startsWith('|')) {
-        systemPrompt = `You are an AI assistant. The following is the content of a spreadsheet, formatted as a Markdown table. Please summarize or analyze the data, and answer the user's question.\n\nFile content:\n${fileContent}`;
-      } else {
-        systemPrompt = `You are an AI assistant. Use ONLY the following file content to answer the user's question. File content:\n${fileContent}`;
-      }
-
+      let systemPrompt = `You are an AI assistant. Use ONLY the following file content to answer the user's question. File content:\n${fileContent}`;
+      console.log('fileContent:', fileContent);
+      console.log('systemPrompt:', systemPrompt);
       const promptMessages: OpenAI.ChatCompletionMessageParam[] = [
         {
           role: "system",
@@ -55,14 +45,12 @@ export async function POST(req: Request) {
           content: userQuery
         }
       ];
-
       // Use Chat Completions API (gpt-4o)
       const completion = await openai.chat.completions.create({
         model: "gpt-4o",
         messages: promptMessages,
         stream: true,
       });
-
       const encoder = new TextEncoder();
       const customReadable = new ReadableStream({
         async start(controller) {
@@ -80,7 +68,6 @@ export async function POST(req: Request) {
           }
         },
       });
-
       return new Response(customReadable, {
         headers: {
           'Content-Type': 'text/event-stream',
