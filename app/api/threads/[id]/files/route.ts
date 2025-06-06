@@ -6,18 +6,20 @@ const supabase = createClient(
   process.env.SUPABASE_ANON_KEY!
 );
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
-  const { id } = params;
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   if (!id) {
     return NextResponse.json({ error: 'Missing thread_id' }, { status: 400 });
   }
+
   const { data, error } = await supabase
     .from('files')
     .select('*')
-    .eq('thread_id', id)
-    .order('uploaded_at', { ascending: false });
+    .eq('thread_id', id);
+
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
-  return NextResponse.json(data || []);
+
+  return NextResponse.json(data);
 } 

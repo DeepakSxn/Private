@@ -1,34 +1,31 @@
 import { PDFDocument } from 'pdf-lib';
-import * as pdfjsLib from 'pdfjs-dist';
-import { getDocument } from 'pdfjs-dist';
 import { read, utils } from 'xlsx';
-
-// Initialize PDF.js worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+import pdfParse from 'pdf-parse';
 
 export async function extractTextFromBuffer(buffer: Buffer, mimeType: string): Promise<string> {
   try {
     if (mimeType === 'application/pdf') {
-      // Load the PDF document
-      const pdfDoc = await PDFDocument.load(buffer);
-      const numPages = pdfDoc.getPageCount();
-      let fullText = '';
+      try {
+        // Use pdf-parse for text extraction
+        const pdfData = await pdfParse(buffer);
+        let fullText = pdfData.text;
 
-      // Load the PDF using PDF.js for text extraction
-      const pdf = await getDocument({ data: buffer }).promise;
+        // If text extraction was successful, return it
+        if (fullText && fullText.trim().length > 0) {
+          return fullText.trim();
+        }
 
-      // Extract text from each page
-      for (let i = 0; i < numPages; i++) {
-        const page = await pdf.getPage(i + 1);
-        const textContent = await page.getTextContent();
-        const pageText = textContent.items
-          .map((item: any) => item.str)
-          .join(' ')
-          .trim();
-        fullText += pageText + '\n\n';
+        // Fallback to basic PDF info if text extraction failed
+        const pdfDoc = await PDFDocument.load(buffer);
+        const numPages = pdfDoc.getPageCount();
+        return `PDF Document (${numPages} pages)\nNote: Could not extract text from this PDF. The file might be scanned or contain only images.`;
+      } catch (pdfError) {
+        console.error('Error parsing PDF:', pdfError);
+        // Fallback to basic PDF info
+        const pdfDoc = await PDFDocument.load(buffer);
+        const numPages = pdfDoc.getPageCount();
+        return `PDF Document (${numPages} pages)\nError: Could not extract text from this PDF. The file might be corrupted or password protected.`;
       }
-
-      return fullText.trim();
     } else if (
       mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
       mimeType === 'application/vnd.ms-excel' ||

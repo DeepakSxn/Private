@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import OpenAI from 'openai';
-import { extractTextFromBuffer } from '../../../read-file/route';
+import { extractTextFromBuffer } from '@/lib/file-utils';
 import { promises as fs } from 'fs';
 
 const supabase = createClient(
@@ -94,7 +94,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
             const arrayBuffer = await res.arrayBuffer();
             const buffer = Buffer.from(arrayBuffer);
             // Use the extraction util for both text and PDF
-            const text = await extractTextFromBuffer(buffer, file.name, file.type);
+            const text = await extractTextFromBuffer(buffer, file.type);
             fileContents.push(`File: ${file.name}\n${text}`);
           } else {
             fileContents.push(`File: ${file.name} (not text, not included)`);
@@ -108,7 +108,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
 
     // Detect if the user question is about the file
-    const isFileQuestion = (text) => /file|document|pdf|attached|above/i.test(text);
+    const isFileQuestion = (text: string) => /file|document|pdf|attached|above/i.test(text);
 
     let prompt;
     if (files.length > 0 && isFileQuestion(content)) {
