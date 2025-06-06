@@ -64,7 +64,6 @@ export function ChatInterface({
   const [isStreaming, setIsStreaming] = useState(false)
   const [isRecording, setIsRecording] = useState(false)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
-  const [abortController, setAbortController] = useState<AbortController | null>(null)
   const [sendLocked, setSendLocked] = useState(false)
   const [pendingMessage, setPendingMessage] = useState<{
     input: string;
@@ -79,6 +78,7 @@ export function ChatInterface({
   const recognitionRef = useRef<SpeechRecognition | null>(null)
   const { toast } = useToast()
   const prevThreadIdRef = useRef<string | undefined>(selectedThreadId)
+  const abortControllerRef = useRef<AbortController | null>(null)
 
   const sendMessageAndGetAIResponse = async (userMessageContent: string) => {
     let threadId = selectedThreadId;
@@ -88,7 +88,11 @@ export function ChatInterface({
       // Only call addMessage for text messages here, file messages are handled in actuallySendMessage
       if (!selectedFile) {
         const newUserMsg = await addMessage("user", userMessageContent);
-        setMessages((prev) => [...prev, newUserMsg]);
+        // Remove any temporary messages before adding the new one
+        setMessages((prev) => {
+          const filtered = prev.filter(msg => !msg.id.startsWith('temp-'));
+          return [...filtered, newUserMsg];
+        });
       }
     }
 
@@ -101,10 +105,10 @@ export function ChatInterface({
 
     // Create a new AbortController for this request
     const controller = new AbortController()
-    setAbortController(controller)
+    abortControllerRef.current = controller
 
     // Create a temporary message ID for the assistant's response using UUID
-    const tempMessageId = uuidv4()
+    const tempMessageId = `temp-${uuidv4()}`
 
     try {
       console.log('Sending to AI:', lastMessage.content);
@@ -132,9 +136,9 @@ export function ChatInterface({
 
       // Add empty assistant message that we'll update
       setMessages((prev) => {
-        const updatedMessages = [...prev];
-        updatedMessages.push(tempMessage);
-        return updatedMessages;
+        // Remove any existing temporary messages
+        const filtered = prev.filter(msg => !msg.id.startsWith('temp-'));
+        return [...filtered, tempMessage];
       });
 
       const reader = response.body.getReader()
@@ -187,6 +191,8 @@ export function ChatInterface({
       if (addMessage && selectedThreadId && fetchMessages) {
         console.log("Saving assistant message to Supabase:", accumulatedContent);
         await addMessage("assistant", accumulatedContent);
+        // Remove temporary message and fetch fresh messages
+        setMessages((prev) => prev.filter(msg => !msg.id.startsWith('temp-')));
         await fetchMessages();
       }
 
@@ -197,7 +203,8 @@ export function ChatInterface({
       }
     } catch (error: unknown) {
       if (error instanceof Error && error.name === 'AbortError') {
-        // Don't remove the message on abort, just stop streaming
+        // Remove temporary message on abort
+        setMessages((prev) => prev.filter(msg => !msg.id.startsWith('temp-')));
         setIsStreaming(false)
         setIsProcessing(false)
         onStatusChange({ status: "connected", message: "System ready" })
@@ -207,12 +214,13 @@ export function ChatInterface({
           description: "Failed to process your request. Please try again.",
           variant: "destructive",
         })
-        setMessages((prev) => prev.filter((msg) => msg.id !== tempMessageId))
+        // Remove temporary message on error
+        setMessages((prev) => prev.filter(msg => !msg.id.startsWith('temp-')));
       }
     } finally {
       setIsProcessing(false)
       setIsStreaming(false)
-      setAbortController(null)
+      abortControllerRef.current = null
       onStatusChange({ status: "connected", message: "System ready" })
     }
   };
@@ -308,14 +316,20 @@ export function ChatInterface({
   }
 
   const handleStopStreaming = () => {
-    if (abortController) {
-      abortController.abort();
-      setIsStreaming(false);
-      setIsProcessing(false);
-      setSendLocked(false);
-      onStatusChange({ status: "connected", message: "System ready" });
+    console.log('[handleStopStreaming] Called');
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      console.log('[handleStopStreaming] Abort triggered');
+    } else {
+      console.log('[handleStopStreaming] No abortControllerRef.current');
     }
-  }
+    setIsStreaming(false);
+    setIsProcessing(false);
+    setSendLocked(false);
+    abortControllerRef.current = null;
+    onStatusChange({ status: "connected", message: "System ready" });
+    console.log('[handleStopStreaming] UI state reset');
+  };
 
   // Effect: When selectedThreadId changes and there is a pending message, send it
   useEffect(() => {
@@ -417,6 +431,9 @@ export function ChatInterface({
     if (file) {
       const formData = new FormData();
       formData.append('file', file);
+      if (selectedThreadId) {
+        formData.append('thread_id', selectedThreadId);
+      }
       let fileUrl = '';
       let fileText = "";
       // 1. Upload file to Supabase Storage
@@ -484,14 +501,8 @@ export function ChatInterface({
             onThreadNameUpdate(newName);
           }
           // Add assistant response
-          if (addMessage && selectedThreadId && fetchMessages) {
-            await addMessage("assistant", data.result, {
-              name: file.name,
-              type: file.type,
-              size: file.size,
-              url: fileUrl,
-            });
-            await fetchMessages();
+          if (fetchMessages) {
+            fetchMessages();
           }
           setSendLocked(false);
           setIsProcessing(false);
@@ -582,7 +593,8 @@ export function ChatInterface({
     let accumulatedContent = "";
     // Create a new AbortController for this request
     const controller = new AbortController();
-    setAbortController(controller);
+    abortControllerRef.current = controller;
+    console.log('[streaming] New AbortController set');
     try {
       const response = await fetch("/api/chat", {
         method: "POST",
@@ -595,6 +607,10 @@ export function ChatInterface({
       const decoder = new TextDecoder();
       let done = false;
       while (reader && !done) {
+        if (abortControllerRef.current && abortControllerRef.current.signal.aborted) {
+          console.log('[streaming loop] Abort detected, breaking loop');
+          break;
+        }
         const { value, done: streamDone } = await reader.read();
         done = streamDone;
         if (value) {
@@ -626,17 +642,29 @@ export function ChatInterface({
         }
       }
       // Save the assistant's response (accumulatedContent) to Supabase (if addMessage is provided and a thread is selected)
-      if (addMessage && selectedThreadId && fetchMessages) {
-        await addMessage("assistant", accumulatedContent || "[No response]");
-        await fetchMessages();
+      setSendLocked(false);
+      setIsProcessing(false);
+      setIsStreaming(false);
+      setInput("");
+      setSelectedFile(null);
+      abortControllerRef.current = null;
+      if (fetchMessages) {
+        fetchMessages();
       }
     } catch (error: any) {
-      if (error.name === 'AbortError') {
+      if (error.name === 'AbortError' || (abortControllerRef.current && abortControllerRef.current.signal.aborted)) {
+        console.log('[streaming catch] AbortError caught, resetting UI state');
+        setIsStreaming(false);
+        setIsProcessing(false);
+        setSendLocked(false);
+        abortControllerRef.current = null;
+        onStatusChange({ status: "connected", message: "System ready" });
         toast({
           title: "Stopped",
           description: "AI response was stopped.",
           variant: "default",
         });
+        return;
       } else {
         toast({
           title: "Error",
@@ -644,14 +672,6 @@ export function ChatInterface({
           variant: "destructive",
         });
       }
-    } finally {
-      setSendLocked(false);
-      setIsProcessing(false);
-      setIsStreaming(false);
-      setInput("");
-      setSelectedFile(null);
-      setAbortController(null);
-      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
 
@@ -757,11 +777,19 @@ export function ChatInterface({
         className="flex-1 overflow-y-auto p-4 pt-24 pb-28 space-y-4 scrollbar-w-2 scrollbar-track-blue-lighter scrollbar-thumb-blue scrollbar-thumb-rounded"
       >
         <div className="max-w-2xl mx-auto w-full">
-          {messages.map((message, idx) => (
-            <div key={message.id || idx} className="mb-6">
-              <ChatMessage message={message} />
-            </div>
-          ))}
+          {messages.map((message, idx) => {
+            // Handle both string and Date timestamps
+            const timestamp = message.timestamp instanceof Date 
+              ? message.timestamp.getTime() 
+              : typeof message.timestamp === 'string' 
+                ? new Date(message.timestamp).getTime()
+                : Date.now();
+            return (
+              <div key={`${message.id}-${timestamp}-${idx}`} className="mb-6">
+                <ChatMessage message={message} />
+              </div>
+            );
+          })}
           {/* Inline AI processing indicator: only show if processing and last message is not assistant */}
           {isProcessing && (!messages.length || messages[messages.length-1].role !== 'assistant') && (
             <div className="mb-6 flex items-start gap-4 pr-5">
@@ -846,8 +874,8 @@ export function ChatInterface({
                   variant="ghost"
                   size="icon"
                   title="Stop AI response"
-                 // className="text-red-500 hover:text-red-600 bg-transparent shadow-none  active:scale-100"
                   style={{ boxShadow: 'none', outline: 'none', background: 'transparent' }}
+                  disabled={false}
                 >
                   <StopCircle className="h-6 w-6" />
                   <span className="sr-only">Stop</span>

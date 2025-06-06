@@ -4,12 +4,70 @@ import path from 'path';
 import mammoth from 'mammoth';
 import Tesseract from 'tesseract.js';
 const pdfParse = require('pdf-parse');
-import * as XLSX from 'xlsx';
+const XLSX = require('xlsx');
 import * as textract from 'textract';
 
 export const config = {
   api: { bodyParser: false },
 };
+
+export async function extractTextFromBuffer(buffer: Buffer, fileName: string, mimeType: string): Promise<string> {
+  let text = '';
+  if (mimeType === 'application/pdf') {
+    const pdfData = await pdfParse(buffer);
+    text = pdfData.text;
+  } else if (mimeType === 'text/plain' || fileName.endsWith('.txt') || fileName.endsWith('.csv')) {
+    text = buffer.toString('utf-8');
+  } else if (
+    mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+    fileName.endsWith('.xlsx')
+  ) {
+    const workbook = XLSX.read(buffer, { type: 'buffer' });
+    let extracted = '';
+    let foundData = false;
+    for (const sheetName of workbook.SheetNames) {
+      const worksheet = workbook.Sheets[sheetName];
+      const json: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+      if (json.length > 0 && json.some(row => row.length > 0)) {
+        foundData = true;
+        extracted += `Sheet: ${sheetName}\n`;
+        const rows = json.slice(0, 20);
+        const header = rows[0].map((cell: any) => cell || '').join(' | ');
+        const separator = rows[0].map(() => '---').join(' | ');
+        const body = rows.slice(1).map((row: any[]) => row.map(cell => cell || '').join(' | ')).join('\n');
+        extracted += `| ${header} |\n| ${separator} |\n${body ? body.split('\n').map(r => `| ${r} |`).join('\n') : ''}\n\n`;
+      }
+    }
+    if (!foundData) {
+      text = 'No data found in any sheet of the Excel file.';
+    } else {
+      text = extracted;
+    }
+  } else if (
+    mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+    fileName.endsWith('.docx')
+  ) {
+    const result = await mammoth.extractRawText({ buffer });
+    text = result.value;
+  } else if (
+    mimeType === 'application/msword' ||
+    fileName.endsWith('.doc')
+  ) {
+    text = await new Promise((resolve, reject) => {
+      textract.fromBufferWithMime(
+        mimeType,
+        buffer,
+        (error: Error | null, result: string | null) => {
+          if (error) reject(error);
+          else resolve(result ?? "");
+        }
+      );
+    });
+  } else {
+    text = 'Unsupported file type.';
+  }
+  return text;
+}
 
 export async function POST(req: NextRequest) {
   try {

@@ -10,9 +10,13 @@ export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
     const file = formData.get('file') as File;
+    const threadId = formData.get('thread_id') as string | null;
     if (!file) {
       console.error('[upload-image] No file uploaded');
       return NextResponse.json({ error: 'No file uploaded' }, { status: 400 });
+    }
+    if (!threadId) {
+      return NextResponse.json({ error: 'No thread_id provided' }, { status: 400 });
     }
     const fileExt = file.name.split('.').pop();
     const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${fileExt}`;
@@ -34,6 +38,21 @@ export async function POST(req: NextRequest) {
     if (!publicUrlData.publicUrl) {
       console.error('[upload-image] Supabase getPublicUrl error: No public URL found');
       return NextResponse.json({ error: 'No public URL found' }, { status: 500 });
+    }
+    // Insert into files table
+    const { error: fileInsertError } = await supabase
+      .from('files')
+      .insert([
+        {
+          thread_id: threadId,
+          name: file.name,
+          url: publicUrlData.publicUrl,
+          type: file.type,
+        },
+      ]);
+    if (fileInsertError) {
+      console.error('[upload-image] Error inserting file into files table:', fileInsertError);
+      return NextResponse.json({ error: fileInsertError.message }, { status: 500 });
     }
     return NextResponse.json({ url: publicUrlData.publicUrl }, {
       headers: {

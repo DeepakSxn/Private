@@ -1,10 +1,10 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
-import { Search, MoreHorizontal, Check, X, Menu, Plus, Upload, FileText } from "lucide-react"
+import { Search, MoreHorizontal, Check, X, Menu, Plus, Upload, FileText, File as FileIcon } from "lucide-react"
 import type { FileCategory } from "@/types/file"
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
@@ -35,6 +35,28 @@ export function Sidebar({
   const [editingThread, setEditingThread] = useState<{ id: string; name: string } | null>(null)
   const [newThreadName, setNewThreadName] = useState("")
   const router = useRouter()
+  const [files, setFiles] = useState<any[]>([])
+
+  useEffect(() => {
+    async function fetchFiles() {
+      if (!selectedThreadId) {
+        setFiles([])
+        return
+      }
+      try {
+        const res = await fetch(`/api/threads/${selectedThreadId}/files`)
+        if (res.ok) {
+          const data = await res.json()
+          setFiles(data)
+        } else {
+          setFiles([])
+        }
+      } catch {
+        setFiles([])
+      }
+    }
+    fetchFiles()
+  }, [selectedThreadId])
 
   // Filter threads based on search query
   const filteredThreads = threads.filter(thread => 
@@ -209,9 +231,7 @@ export function Sidebar({
                       </div>
                     ))
                   ) : (
-                    <div className="px-3 py-2 text-sm text-muted-foreground dark:text-white/50">
-                      {searchQuery ? 'No conversations found' : 'No conversations yet'}
-                    </div>
+                    <div className="text-xs text-muted-foreground px-2 py-4">No conversations found.</div>
                   )}
                 </div>
               </div>

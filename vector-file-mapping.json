@@ -88,5 +88,17 @@
     "original_file_id": "file-CDzy2XMi673WxvasxyfUh3",
     "filename": "RESUME.pdf",
     "created_at": 1749136833865
+  },
+  {
+    "vector_store_file_id": "file-YagxkfLKRkGKKkixi2U4vG",
+    "original_file_id": "file-YagxkfLKRkGKKkixi2U4vG",
+    "filename": "2121459_ProjectPPT_satyam.pptx",
+    "created_at": 1749207128771
+  },
+  {
+    "vector_store_file_id": "file-54iY1RYV8MCeDdgvE4yizB",
+    "original_file_id": "file-54iY1RYV8MCeDdgvE4yizB",
+    "filename": "Day 1 Summary.pdf",
+    "created_at": 1749210159959
   }
 ]
