@@ -63,6 +63,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   // If this is a user message, trigger OpenAI with all files in the thread
   if (role === 'user') {
+    // Prevent double response for image uploads
+    if (file && file.type && file.type.startsWith('image/')) {
+      // Do NOT generate a backend AI response for image uploads
+      return NextResponse.json(data[0]);
+    }
     // Fetch all files for this thread
     const { data: files, error: filesError } = await supabase
       .from('files')
@@ -83,32 +88,50 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       }
     }
 
-    // Fetch file contents (for text and PDF files)
+    // Fetch file contents (for all supported file types)
     let fileContents = [];
     for (const file of uniqueFiles) {
       try {
         if (file.url && file.type) {
-          if (file.type.startsWith('text') || file.type === 'application/pdf') {
+          // Check if it's a supported file type
+          const supportedTypes = [
+            'application/pdf',
+            'text/plain',
+            'text/csv',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'application/msword',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'application/vnd.ms-excel',
+            'image/jpeg',
+            'image/jpg',
+            'image/png',
+            'image/gif',
+            'image/webp',
+            'image/bmp',
+            'image/tiff'
+          ];
+          
+          if (supportedTypes.includes(file.type) || file.type.startsWith('text/')) {
             // Download the file from storage
             const res = await fetch(file.url);
             const arrayBuffer = await res.arrayBuffer();
             const buffer = Buffer.from(arrayBuffer);
-            // Use the extraction util for both text and PDF
+            // Use the extraction util for all supported file types
             const text = await extractTextFromBuffer(buffer, file.type);
             fileContents.push(`File: ${file.name}\n${text}`);
           } else {
-            fileContents.push(`File: ${file.name} (not text, not included)`);
+            fileContents.push(`File: ${file.name} (unsupported file type: ${file.type})`);
           }
         } else {
           fileContents.push(`File: ${file.name} (missing url or type)`);
         }
       } catch (e) {
-        fileContents.push(`File: ${file.name} (error reading file)`);
+        fileContents.push(`File: ${file.name} (error reading file: ${e})`);
       }
     }
 
     // Detect if the user question is about the file
-    const isFileQuestion = (text: string) => /file|document|pdf|attached|above/i.test(text);
+    const isFileQuestion = (text: string) => /file|document|pdf|excel|spreadsheet|word|docx?|xlsx?|image|photo|picture|attached|above/i.test(text);
 
     let prompt;
     if (files.length > 0 && isFileQuestion(content)) {

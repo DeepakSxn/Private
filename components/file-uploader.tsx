@@ -50,13 +50,24 @@ export function FileUploader() {
       "application/pdf",
       "text/plain",
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "application/msword",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "application/vnd.ms-excel",
+      "text/csv",
+      "image/jpeg",
+      "image/jpg",
+      "image/png",
+      "image/gif",
+      "image/webp",
+      "image/bmp",
+      "image/tiff"
     ]
     const validFiles = files.filter((file) => validFileTypes.includes(file.type))
 
     if (validFiles.length !== files.length) {
       toast({
         title: "Invalid file type",
-        description: "Only PDF, TXT, and DOCX files are supported.",
+        description: "Only PDF, TXT, DOCX, DOC, XLSX, XLS, CSV, and image files (JPEG, PNG, GIF, WebP, BMP, TIFF) are supported.",
         variant: "destructive",
       })
 
@@ -103,10 +114,14 @@ export function FileUploader() {
   const getFileIcon = (fileType: string) => {
     if (fileType === "application/pdf") {
       return <File className="h-6 w-6 text-red-500" />
-    } else if (fileType === "text/plain") {
+    } else if (fileType === "text/plain" || fileType === "text/csv") {
       return <FileText className="h-6 w-6 text-blue-500" />
-    } else if (fileType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
-      return <FileSpreadsheet className="h-6 w-6 text-blue-700" />
+    } else if (fileType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || fileType === "application/msword") {
+      return <FileText className="h-6 w-6 text-blue-700" />
+    } else if (fileType === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" || fileType === "application/vnd.ms-excel") {
+      return <FileSpreadsheet className="h-6 w-6 text-green-600" />
+    } else if (fileType.startsWith('image/')) {
+      return <File className="h-6 w-6 text-purple-500" />
     }
     return <File className="h-6 w-6" />
   }
@@ -115,7 +130,7 @@ export function FileUploader() {
     <div className="flex flex-col gap-4">
       <div className="space-y-2">
         <h3 className="text-lg font-medium">Upload Documents</h3>
-        <p className="text-sm text-muted-foreground">Upload PDF, TXT, or DOCX files to add to your knowledge base.</p>
+        <p className="text-sm text-muted-foreground">Upload PDF, TXT, DOCX, DOC, XLSX, XLS, CSV, or image files (JPEG, PNG, GIF, WebP, BMP, TIFF) to add to your knowledge base.</p>
       </div>
 
       <Select value={selectedCategory} onValueChange={(value) => setSelectedCategory(value as FileCategory)}>
@@ -146,7 +161,7 @@ export function FileUploader() {
             id="file-upload"
             className="hidden"
             multiple
-            accept=".pdf,.txt,.docx"
+            accept=".pdf,.txt,.docx,.doc,.xlsx,.xls,.csv,.jpg,.jpeg,.png,.gif,.webp,.bmp,.tiff"
             onChange={handleFileChange}
           />
           <Button asChild>
@@ -166,7 +181,7 @@ export function FileUploader() {
       )}
 
       <div className="text-xs text-muted-foreground mt-2">
-        <p>Supported file types: PDF, TXT, DOCX</p>
+        <p>Supported file types: PDF, TXT, DOCX, DOC, XLSX, XLS, CSV, JPEG, PNG, GIF, WebP, BMP, TIFF</p>
         <p>Maximum file size: 10MB</p>
       </div>
     </div>

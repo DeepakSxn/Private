@@ -523,9 +523,6 @@ export function ChatInterface({
             })
           });
           const data = await res.json();
-          if (!res.ok) {
-            throw new Error(data.error || 'Failed to process image');
-          }
           // 3. Add user message and assistant response to chat
           const tempUserId = `temp-${uuidv4()}`;
           userMessage = {
@@ -544,8 +541,6 @@ export function ChatInterface({
           };
           // Optimistically add the user's file message to the chat area immediately
           setMessages((prev) => [...prev, userMessage]);
-          // Debug log for file object
-          console.log('[actuallySendMessage] addMessage file object:', userMessage.file);
           // Persist user message before AI call
           if (addMessage && selectedThreadId && fetchMessages) {
             await addMessage("user", userMessage.content, userMessage.file);
@@ -557,6 +552,19 @@ export function ChatInterface({
               setSendLocked(false);
             }
           }
+          // Only add the assistant's vision response to the backend and then fetch messages (no direct setMessages)
+          const aiVisionMessage = {
+            id: uuidv4(),
+            content: data.result || data.error || "Failed to analyze image.",
+            type: "text",
+            role: "assistant",
+            timestamp: new Date(),
+          };
+          // Persist the AI vision response in the backend and refresh chat
+          if (addMessage && selectedThreadId && fetchMessages) {
+            await addMessage("assistant", aiVisionMessage.content);
+            await fetchMessages();
+          }
           // Clear file from input area immediately after sending
           setSelectedFile(null);
           setFileText("");
@@ -565,17 +573,6 @@ export function ChatInterface({
           if (messages.length === 0 && selectedThreadId && onThreadNameUpdate) {
             const newName = fullMessage.slice(0, 50); // Limit to 50 chars
             onThreadNameUpdate(newName);
-          }
-          // After backend/AI response and before adding fetched messages, filter out temp messages
-          if (fetchMessages) {
-            setMessages((prev) => prev.filter(msg => !msg.id.startsWith('temp-')));
-            try {
-              await fetchMessages();
-            } finally {
-              setIsProcessing(false);
-              setIsStreaming(false);
-              setSendLocked(false);
-            }
           }
           setSendLocked(false);
           setIsProcessing(false);

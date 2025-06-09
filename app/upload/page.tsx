@@ -100,7 +100,6 @@ export default function UploadPage() {
     <div className="flex flex-col min-h-screen bg-background dark:bg-black">
       <Header systemStatus={{status: 'connected', message: 'System ready'}} toggleSidebar={() => {}} />
       <Button
-        variant="ghost"
         onClick={() => router.push('/chat')}
         className="fixed left-4 top-20 flex items-center gap-2 px-4 py-2 bg-black text-white hover:bg-white hover:text-black border border-black rounded-full transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105 z-50"
       >
@@ -126,11 +125,12 @@ export default function UploadPage() {
                 ref={fileInputRef}
                 type="file"
                 onChange={handleFileChange}
+                accept=".pdf,.txt,.docx,.doc,.xlsx,.xls,.csv,.jpg,.jpeg,.png,.gif,.webp,.bmp,.tiff"
                 className="w-full text-foreground dark:text-white hidden"
                 tabIndex={-1}
               />
               <div className="w-full flex items-center gap-2">
-                <Button type="button" variant="outline" className="font-semibold" onClick={() => fileInputRef.current?.click()}>
+                <Button type="button" className="font-semibold border border-input bg-background text-black hover:bg-accent hover:text-accent-foreground" onClick={() => fileInputRef.current?.click()}>
                   Choose File
                 </Button>
                 <span className="truncate text-base text-foreground dark:text-white">{file ? file.name : 'No file chosen'}</span>

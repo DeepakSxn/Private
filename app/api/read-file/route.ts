@@ -2,7 +2,6 @@ import { NextRequest } from 'next/server';
 import { promises as fs } from 'fs';
 import path from 'path';
 import mammoth from 'mammoth';
-import Tesseract from 'tesseract.js';
 const pdfParse = require('pdf-parse');
 import * as XLSX from 'xlsx';
 import * as textract from 'textract';

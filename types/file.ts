@@ -1,4 +1,4 @@
-export type FileType = "pdf" | "txt" | "docx"
+export type FileType = "pdf" | "txt" | "docx" | "doc" | "xlsx" | "xls" | "csv" | "jpg" | "jpeg" | "png" | "gif" | "webp" | "bmp" | "tiff"
 
 export type FileCategory = "business" | "personal" | "financial"
 

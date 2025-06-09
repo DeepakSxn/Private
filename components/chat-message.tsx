@@ -295,8 +295,6 @@ export function ChatMessage({ message }: ChatMessageProps) {
             )}>
               <span className="font-semibold">User query:</span> {userQuery}
             </div>
-          ) : (message.file.type.includes('image') && !message.content) ? (
-            <div className="mt-2 text-black">Image uploaded by user</div>
           ) : null}
         </div>
       );
