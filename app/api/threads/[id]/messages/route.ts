@@ -68,6 +68,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       // Do NOT generate a backend AI response for image uploads
       return NextResponse.json(data[0]);
     }
+
+    // Prevent AI response for image generation prompts
+    if (/\b(generate|create)\b.*\bimage(s)?\b.*\bof\b/i.test(content.trim())) {
+      // Do NOT generate a backend AI response for image generation prompts
+      return NextResponse.json(data[0]);
+    }
+
     // Fetch all files for this thread
     const { data: files, error: filesError } = await supabase
       .from('files')

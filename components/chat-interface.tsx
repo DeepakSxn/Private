@@ -415,7 +415,7 @@ export function ChatInterface({
       setIsProcessing(true);
       setSendLocked(true);
 
-      // Add the user's message to Supabase
+      // Add the user's message to the chat and backend, but do NOT send to AI for a text response
       if (addMessage && selectedThreadId) {
         await addMessage("user", inputValue.trim(), undefined);
       }
