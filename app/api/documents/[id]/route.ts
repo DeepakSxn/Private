@@ -5,7 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 
-const VECTOR_STORE_ID = 'vs_6824baf19a188191ad264f4a377257ec';
+const VECTOR_STORE_ID = process.env.VECTOR_STORE_ID || '';
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 export async function DELETE(
@@ -14,7 +14,7 @@ export async function DELETE(
 ): Promise<NextResponse> {
   const { id } = await params;
   try {
-    await openai.vectorStores.files.del(process.env.VECTOR_STORE_ID!, id);
+    await openai.vectorStores.files.del(VECTOR_STORE_ID, id);
     await openai.files.del(id);
     return NextResponse.json({ success: true }, { status: 200 });
   } catch (e: any) {

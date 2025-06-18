@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 
-const VECTOR_STORE_ID = 'vs_6824baf19a188191ad264f4a377257ec';
+const VECTOR_STORE_ID = process.env.VECTOR_STORE_ID || '';
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 export async function GET(req: NextRequest) {

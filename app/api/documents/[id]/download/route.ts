@@ -3,7 +3,7 @@ import OpenAI from 'openai';
 import { promises as fs } from 'fs';
 import path from 'path';
 
-const VECTOR_STORE_ID = 'vs_6824baf19a188191ad264f4a377257ec';
+const VECTOR_STORE_ID = process.env.VECTOR_STORE_ID || '';
 const MAPPING_FILE = path.resolve(process.cwd(), 'vector-file-mapping.json');
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
