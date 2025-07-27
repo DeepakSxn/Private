@@ -148,5 +148,59 @@
     "original_file_id": "file-77M6nc5Ai3HoGY9kkBAri9",
     "filename": "EOXS RESPONSE.txt",
     "created_at": 1750244348697
+  },
+  {
+    "vector_store_file_id": "file-Dx1F7mpw3RCQm3uMQrEiV6",
+    "original_file_id": "file-Dx1F7mpw3RCQm3uMQrEiV6",
+    "filename": "Master Employee Directory.txt",
+    "created_at": 1753618581798
+  },
+  {
+    "vector_store_file_id": "file-4yeoz5e6fEDkpY3mw9kRaq",
+    "original_file_id": "file-4yeoz5e6fEDkpY3mw9kRaq",
+    "filename": "Innovation.txt",
+    "created_at": 1753620608239
+  },
+  {
+    "vector_store_file_id": "file-Rnohc9Pu1v8JTNEmjoer3t",
+    "original_file_id": "file-Rnohc9Pu1v8JTNEmjoer3t",
+    "filename": "Implementation Knowledge Base.txt",
+    "created_at": 1753620616537
+  },
+  {
+    "vector_store_file_id": "file-HMJbZ9E9CiuZuFERjAfr9o",
+    "original_file_id": "file-HMJbZ9E9CiuZuFERjAfr9o",
+    "filename": "Marketing, HR & Accounting Knowledg.txt",
+    "created_at": 1753620633797
+  },
+  {
+    "vector_store_file_id": "file-3hHr1bm1kU8oRz5XvtsiNR",
+    "original_file_id": "file-3hHr1bm1kU8oRz5XvtsiNR",
+    "filename": "PR & Branding.txt",
+    "created_at": 1753620641161
+  },
+  {
+    "vector_store_file_id": "file-JiXyby1J6GW4D42VmwDAQG",
+    "original_file_id": "file-JiXyby1J6GW4D42VmwDAQG",
+    "filename": "Glossary.txt",
+    "created_at": 1753620651648
+  },
+  {
+    "vector_store_file_id": "file-VDbTTMK1njJxTDHJzSD1cS",
+    "original_file_id": "file-VDbTTMK1njJxTDHJzSD1cS",
+    "filename": "Product Knowledge Base.txt",
+    "created_at": 1753620666651
+  },
+  {
+    "vector_store_file_id": "file-Lg1k2b7JtKWRddbkCctSBA",
+    "original_file_id": "file-Lg1k2b7JtKWRddbkCctSBA",
+    "filename": "Sales.txt",
+    "created_at": 1753620674636
+  },
+  {
+    "vector_store_file_id": "file-6ivqWeYWaAGpdc2onqqtAb",
+    "original_file_id": "file-6ivqWeYWaAGpdc2onqqtAb",
+    "filename": "EOXS Bible (AI Doc)- 2.docx",
+    "created_at": 1753629815221
   }
 ]

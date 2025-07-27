@@ -1,5 +1,5 @@
 import { OpenAI } from "openai"
-import { NextResponse } from 'next/server';
+import { NextResponse } from 'next/server'
 
 // Allow responses up to 30 seconds
 export const maxDuration = 30
@@ -7,67 +7,75 @@ export const maxDuration = 30
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
 
 interface ChatMessage {
-  role: string;
-  content: string;
+  role: string
+  content: string
+  fileContent?: string
+  file?: { fileContent?: string }
 }
 
 export async function POST(req: Request) {
   try {
     const { messages } = await req.json()
-    const lastMessage = messages[messages.length - 1]
+    const lastMessage: ChatMessage = messages[messages.length - 1]
 
-    // --- If file is attached and fileContent is present: Use file content and user query with Chat API ---
+    // Check for explicit web search
+    const webSearchKeywords = ["search web", "look online", "google it", "search it online"]
+    const isWebSearch = webSearchKeywords.some(keyword =>
+      lastMessage.content?.toLowerCase().includes(keyword)
+    )
+
+    if (isWebSearch) {
+      return NextResponse.json({
+        content: "🔍 Web search requested. (Web search is not implemented in this route. Please try again through the web search endpoint.)"
+      })
+    }
+
+    // --- File-based logic ---
     if (
       lastMessage.content?.startsWith("Attached file (") &&
       lastMessage.fileContent &&
       typeof lastMessage.fileContent === "string" &&
       lastMessage.fileContent.trim().length > 0
     ) {
-      let fileContent = lastMessage.fileContent || (lastMessage.file && lastMessage.file.fileContent);
-      // Truncate fileContent if too large
-      const maxLength = 6000;
+      let fileContent = lastMessage.fileContent || lastMessage.file?.fileContent
+      const maxLength = 6000
       if (fileContent && fileContent.length > maxLength) {
-        fileContent = fileContent.slice(0, maxLength) + '\n... (truncated)';
+        fileContent = fileContent.slice(0, maxLength) + '\n... (truncated)'
       }
-      // Extract everything after the first line (file attachment line) as the user query
-      const lines = lastMessage.content.split('\n');
-      const userQuery = lines.slice(1).join('\n').trim();
-      let systemPrompt = `You are an AI assistant. Use ONLY the following file content to answer the user's question. File content:\n${fileContent}`;
-      console.log('fileContent:', fileContent);
-      console.log('systemPrompt:', systemPrompt);
+
+      const lines = lastMessage.content.split('\n')
+      const userQuery = lines.slice(1).join('\n').trim()
+      const systemPrompt = `You are an AI assistant. Use ONLY the following file content to answer the user's question. Do not hallucinate. If the content is not relevant, reply exactly: "❌ No relevant data found in Rector's tool database."\n\nFile content:\n${fileContent}`
+
       const promptMessages: OpenAI.ChatCompletionMessageParam[] = [
-        {
-          role: "system",
-          content: systemPrompt
-        },
-        {
-          role: "user",
-          content: userQuery
-        }
-      ];
-      // Use Chat Completions API (gpt-4o)
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userQuery }
+      ]
+
       const completion = await openai.chat.completions.create({
         model: "gpt-4o",
         messages: promptMessages,
-        stream: true,
-      });
-      const encoder = new TextEncoder();
+        stream: true
+      })
+
+      const encoder = new TextEncoder()
       const customReadable = new ReadableStream({
         async start(controller) {
           try {
             for await (const chunk of completion) {
-              const content = chunk.choices?.[0]?.delta?.content;
+              const content = chunk.choices?.[0]?.delta?.content
               if (content) {
-                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ content })}\n\n`));
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ content })}\n\n`))
               }
             }
-            controller.enqueue(encoder.encode(`data: [DONE]\n\n`));
-            controller.close();
+            controller.enqueue(encoder.encode(`data: [DONE]\n\n`))
+            controller.close()
           } catch (error) {
-            controller.error(error);
+            controller.error(error)
           }
-        },
-      });
+        }
+      })
+
       return new Response(customReadable, {
         headers: {
           'Content-Type': 'text/event-stream',
@@ -77,27 +85,24 @@ export async function POST(req: Request) {
       })
     }
 
-    // --- No file attached: Use Assistant API with retrieval, fallback to Chat API if needed ---
-    // Create a thread
+    // --- Assistant API + Vector Store Logic ---
     const thread = await openai.beta.threads.create({})
     const threadId = thread.id
 
-    // Add all messages to the thread
     for (const msg of messages) {
       await openai.beta.threads.messages.create(threadId, {
         role: msg.role,
-        content: msg.content,
+        content: msg.content
       })
     }
 
-    // Run the assistant with retrieval
     const runStream = openai.beta.threads.runs.stream(threadId, {
       assistant_id: process.env.ASSISTANT_ID || "",
+      tool_choice: "required" // This ensures only vector store is used
     })
 
-    let foundUseful = false;
-    let accumulatedContent = "";
-    const encoder = new TextEncoder();
+    let accumulatedContent = ""
+    const encoder = new TextEncoder()
     const customReadable = new ReadableStream({
       async start(controller) {
         try {
@@ -109,51 +114,40 @@ export async function POST(req: Request) {
               event.data.delta &&
               'content' in event.data.delta
             ) {
-              const deltaContent = (event.data.delta as any).content;
-              let content = "";
+              const deltaContent = (event.data.delta as any).content
+              let content = ""
+
               if (Array.isArray(deltaContent)) {
-                content = deltaContent
-                  .map((c: any) => {
-                    if (c && typeof c.text === "object" && typeof c.text.value === "string") return c.text.value;
-                    if (typeof c.text === "string") return c.text;
-                    if (typeof c === "string") return c;
-                    return "";
-                  })
-                  .join("");
+                content = deltaContent.map((c: any) => {
+                  if (c && typeof c.text === "object" && typeof c.text.value === "string") return c.text.value
+                  if (typeof c.text === "string") return c.text
+                  if (typeof c === "string") return c
+                  return ""
+                }).join("")
               } else if (typeof deltaContent === "string") {
-                content = deltaContent;
+                content = deltaContent
               }
+
               if (content) {
-                accumulatedContent += content;
-                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ content })}\n\n`));
-                // Heuristic: If the assistant says it doesn't know, mark as not useful
-                if (!/don't know|not sure|no information|no data|unable to find|I do not have/i.test(content)) {
-                  foundUseful = true;
-                }
+                accumulatedContent += content
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ content })}\n\n`))
               }
             }
           }
-          // If not useful, fallback to Chat API
-          if (!foundUseful || !accumulatedContent.trim()) {
-            const fallbackCompletion = await openai.chat.completions.create({
-              model: "gpt-4o",
-              messages,
-              stream: true,
-            });
-            for await (const chunk of fallbackCompletion) {
-              const content = chunk.choices?.[0]?.delta?.content;
-              if (content) {
-                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ content })}\n\n`));
-              }
-            }
+
+          // If nothing matched from vector, return fallback
+          if (!accumulatedContent.trim()) {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ content: "❌ No relevant data found in Rector's tool database." })}\n\n`))
           }
-          controller.enqueue(encoder.encode(`data: [DONE]\n\n`));
-          controller.close();
+
+          controller.enqueue(encoder.encode(`data: [DONE]\n\n`))
+          controller.close()
         } catch (error) {
-          controller.error(error);
+          console.error("Error in assistant stream:", error)
+          controller.error(error)
         }
-      },
-    });
+      }
+    })
 
     return new Response(customReadable, {
       headers: {
@@ -162,6 +156,7 @@ export async function POST(req: Request) {
         'Connection': 'keep-alive',
       },
     })
+
   } catch (error) {
     console.error("Error in chat API:", error)
     return new Response(JSON.stringify({ error: "Failed to process your request" }), { status: 500 })

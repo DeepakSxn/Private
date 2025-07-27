@@ -61,7 +61,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   console.log('POST /api/threads/[id]/messages - Inserted data:', data);
   console.log('POST /api/threads/[id]/messages - Success:', data[0]);
 
-  // If this is a user message, trigger OpenAI with all files in the thread
+  // If this is a user message, trigger OpenAI Assistant with all files in the thread
   if (role === 'user') {
     // Prevent double response for image uploads
     if (file && file.type && file.type.startsWith('image/')) {
@@ -149,19 +149,83 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       prompt = content;
     }
 
-    // Send to OpenAI (example, you may want to stream or handle differently)
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: [
-        { role: 'system', content: 'You are a helpful assistant.' },
-        { role: 'user', content: prompt },
-      ],
-    });
-    // Save the assistant's response as a message
-    const aiResponse = completion.choices[0]?.message?.content || '[No response]';
-    await supabase.from('messages').insert([
-      { thread_id: id, role: 'assistant', content: aiResponse }
-    ]);
+    // Validate that we have the assistant ID
+    if (!process.env.OPENAI_ASSISTANT_ID) {
+      console.error('❌ CRITICAL: OPENAI_ASSISTANT_ID environment variable is not set!');
+      return NextResponse.json(data[0]);
+    }
+
+    console.log('🔧 Using OpenAI Assistant for message response');
+    console.log('🔧 Assistant ID:', process.env.OPENAI_ASSISTANT_ID);
+
+    try {
+      // Create a thread for the assistant
+      const thread = await openai.beta.threads.create({})
+      const threadId = thread.id
+      console.log('📝 Created thread for assistant:', threadId);
+
+      // Add the prompt to the thread
+      await openai.beta.threads.messages.create(threadId, {
+        role: "user",
+        content: prompt
+      });
+
+      // Run the assistant with file_search enabled (it will automatically search through attached files)
+      const runStream = openai.beta.threads.runs.stream(threadId, {
+        assistant_id: process.env.OPENAI_ASSISTANT_ID || "",
+        tool_choice: "required" // This ensures the assistant uses its file_search tool
+      });
+
+      let accumulatedContent = "";
+      let toolUsed = false;
+
+      for await (const event of runStream) {
+        if (event.event === 'thread.run.requires_action') {
+          console.log('🔧 Tool usage detected');
+          toolUsed = true;
+        }
+        
+        if (event.event === 'thread.message.delta' && event.data?.delta?.content) {
+          const deltaContent = event.data.delta.content;
+          let content = "";
+          if (Array.isArray(deltaContent)) {
+            content = deltaContent
+              .map((c: any) => {
+                if (c && typeof c.text === "object" && typeof c.text.value === "string") return c.text.value;
+                if (typeof c.text === "string") return c.text;
+                if (typeof c === "string") return c;
+                return "";
+              })
+              .join("");
+          } else if (typeof deltaContent === "string") {
+            content = deltaContent;
+          }
+          if (content) {
+            accumulatedContent += content;
+          }
+        }
+      }
+
+      // If no content was generated, provide fallback
+      if (!accumulatedContent.trim()) {
+        console.log('⚠️ No content generated, providing fallback');
+        accumulatedContent = "❌ No relevant data found in the knowledge base.";
+      }
+
+      console.log('📥 Received assistant response:', accumulatedContent);
+
+      // Save the assistant's response as a message
+      await supabase.from('messages').insert([
+        { thread_id: id, role: 'assistant', content: accumulatedContent }
+      ]);
+
+    } catch (error) {
+      console.error('❌ Error calling OpenAI Assistant:', error);
+      // Save error response
+      await supabase.from('messages').insert([
+        { thread_id: id, role: 'assistant', content: "❌ Failed to get response from assistant." }
+      ]);
+    }
   }
 
   return NextResponse.json(data[0]);

@@ -129,7 +129,7 @@ export function ChatInterface({
 
     try {
       console.log('Sending to AI:', lastMessage.content);
-      const response = await fetch("/api/chat", {
+      const response = await fetch("/api/chat-with-vectorstore", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
@@ -675,7 +675,7 @@ export function ChatInterface({
     abortControllerRef.current = controller;
     console.log('[streaming] New AbortController set');
     try {
-      const response = await fetch("/api/chat", {
+      const response = await fetch("/api/chat-with-vectorstore", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: messageHistory, detailedMode: true }),
