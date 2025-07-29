@@ -890,7 +890,7 @@ export function ChatInterface({
   return (
     <div className="flex flex-col h-full chat-background relative">
       {/* Chat Header - Fixed position */}
-      <div className="fixed top-0 left-0 right-0 border-b border-border p-4 flex items-center justify-between bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 z-40">
+      <div className="fixed top-0 left-0 right-0 border-b border-border p-0 flex items-center justify-between bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 z-40">
         <div className="flex items-center gap-2">
           <Button
             variant="ghost"
