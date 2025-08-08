@@ -16,7 +16,6 @@ import { v4 as uuidv4 } from 'uuid'
 import type { SpeechRecognition, SpeechRecognitionEvent, SpeechRecognitionErrorEvent } from "@/types/speech-recognition"
 import mammoth from "mammoth"
 import * as XLSX from "xlsx"
-
 interface ChatInterfaceProps {
   onStatusChange: (status: SystemStatus) => void
   messages: Message[]
@@ -415,7 +414,17 @@ export function ChatInterface({
       setIsProcessing(true);
       setSendLocked(true);
 
-      // Add the user's message to the chat and backend, but do NOT send to AI for a text response
+      // Add the user's message immediately to the UI
+      const userMessage: Message = {
+        id: uuidv4(),
+        content: inputValue.trim(),
+        type: "text",
+        role: "user",
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, userMessage]);
+
+      // Add the user's message to the backend
       if (addMessage && selectedThreadId) {
         await addMessage("user", inputValue.trim(), undefined);
       }
@@ -428,38 +437,43 @@ export function ChatInterface({
         });
         const data = await res.json();
         if (data.url) {
+          // Add the assistant's image message to the UI immediately
+          const assistantMessage: Message = {
+            id: uuidv4(),
+            content: data.url,
+            type: "text",
+            role: "assistant",
+            timestamp: new Date(),
+          };
+          setMessages((prev) => [...prev, assistantMessage]);
+          
           // Add the assistant's image message to Supabase
           if (addMessage && selectedThreadId) {
             await addMessage("assistant", data.url, undefined);
           }
-          // Optionally update UI state for immediate feedback (messages will be re-fetched)
         } else {
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: uuidv4(),
-              content: data.error || "Failed to generate image.",
-              type: "text",
-              role: "assistant",
-              timestamp: new Date(),
-            },
-          ]);
+          const errorMessage: Message = {
+            id: uuidv4(),
+            content: data.error || "Failed to generate image.",
+            type: "text",
+            role: "assistant",
+            timestamp: new Date(),
+          };
+          setMessages((prev) => [...prev, errorMessage]);
         }
         // Update thread name after image generation
         if (onThreadNameUpdate) {
           onThreadNameUpdate(inputValue.trim().slice(0, 50));
         }
       } catch (e) {
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: uuidv4(),
-            content: "Error generating image.",
-            type: "text",
-            role: "assistant",
-            timestamp: new Date(),
-          },
-        ]);
+        const errorMessage: Message = {
+          id: uuidv4(),
+          content: "Error generating image.",
+          type: "text",
+          role: "assistant",
+          timestamp: new Date(),
+        };
+        setMessages((prev) => [...prev, errorMessage]);
       }
       setIsProcessing(false);
       setSendLocked(false);
@@ -467,16 +481,6 @@ export function ChatInterface({
       setInput("");
       setSelectedFile(null);
       abortControllerRef.current = null;
-      if (fetchMessages) {
-        setMessages((prev) => prev.filter(msg => !msg.id.startsWith('temp-')));
-        try {
-          await fetchMessages();
-        } finally {
-          setIsProcessing(false);
-          setIsStreaming(false);
-          setSendLocked(false);
-        }
-      }
       return;
     }
     setSendLocked(true);
@@ -523,10 +527,9 @@ export function ChatInterface({
             })
           });
           const data = await res.json();
-          // 3. Add user message and assistant response to chat
-          const tempUserId = `temp-${uuidv4()}`;
+          // 3. Add user message immediately to the UI
           userMessage = {
-            id: tempUserId,
+            id: uuidv4(),
             content: `Attached image (${file.name})\n${inputValue.trim()}`,
             type: "file",
             role: "user",
@@ -535,36 +538,32 @@ export function ChatInterface({
               name: file.name,
               type: file.type,
               size: file.size,
-              url: fileUrl, // Use Supabase public URL
+              url: fileUrl,
             },
-            fileContent: fileTextToSend, // new property for backend/AI
+            fileContent: fileTextToSend,
           };
-          // Optimistically add the user's file message to the chat area immediately
           setMessages((prev) => [...prev, userMessage]);
-          // Persist user message before AI call
-          if (addMessage && selectedThreadId && fetchMessages) {
+          
+          // Persist user message to backend
+          if (addMessage && selectedThreadId) {
             await addMessage("user", userMessage.content, userMessage.file);
-            try {
-              await fetchMessages();
-            } finally {
-              setIsProcessing(false);
-              setIsStreaming(false);
-              setSendLocked(false);
-            }
           }
-          // Only add the assistant's vision response to the backend and then fetch messages (no direct setMessages)
-          const aiVisionMessage = {
+          
+          // Add the assistant's vision response immediately to the UI
+          const aiVisionMessage: Message = {
             id: uuidv4(),
             content: data.result || data.error || "Failed to analyze image.",
             type: "text",
             role: "assistant",
             timestamp: new Date(),
           };
-          // Persist the AI vision response in the backend and refresh chat
-          if (addMessage && selectedThreadId && fetchMessages) {
+          setMessages((prev) => [...prev, aiVisionMessage]);
+          
+          // Persist the AI vision response to the backend
+          if (addMessage && selectedThreadId) {
             await addMessage("assistant", aiVisionMessage.content);
-            await fetchMessages();
           }
+          
           // Clear file from input area immediately after sending
           setSelectedFile(null);
           setFileText("");
@@ -601,9 +600,8 @@ export function ChatInterface({
         }
         // 3. Construct the message content for UI only (no file content)
         fullMessage = `Attached file (${file.name})\n${inputValue.trim()}`;
-        const tempUserId = `temp-${uuidv4()}`;
         userMessage = {
-          id: tempUserId,
+          id: uuidv4(),
           content: fullMessage,
           type: "file",
           role: "user",
@@ -616,47 +614,33 @@ export function ChatInterface({
           },
           fileContent: fileTextToSend, // new property for backend/AI
         };
-        // Optimistically add the user's file message to the chat area immediately
+        // Add the user's file message immediately to the UI
         setMessages((prev) => [...prev, userMessage]);
-        // Debug log for file object
-        console.log('[actuallySendMessage] addMessage file object:', userMessage.file);
-        // Persist user message before AI call
-        if (addMessage && selectedThreadId && fetchMessages) {
+        
+        // Persist user message to backend
+        if (addMessage && selectedThreadId) {
           await addMessage("user", userMessage.content, userMessage.file);
-          try {
-            await fetchMessages();
-          } finally {
-            setIsProcessing(false);
-            setIsStreaming(false);
-            setSendLocked(false);
-          }
         }
+        
         // Clear file from input area immediately after sending
         setSelectedFile(null);
         setFileText("");
         if (fileInputRef.current) fileInputRef.current.value = "";
       }
     } else {
-      const tempUserId = `temp-${uuidv4()}`;
       userMessage = {
-         id: tempUserId,
+         id: uuidv4(),
          content: fullMessage,
          type: "text",
          role: "user",
          timestamp: new Date(),
       };
-      // Optimistically add the user's text message to the chat area immediately
+      // Add the user's text message immediately to the UI
       setMessages((prev) => [...prev, userMessage]);
-      // Persist user message before AI call
-      if (addMessage && selectedThreadId && fetchMessages) {
+      
+      // Persist user message to backend
+      if (addMessage && selectedThreadId) {
         await addMessage("user", userMessage.content);
-        try {
-          await fetchMessages();
-        } finally {
-          setIsProcessing(false);
-          setIsStreaming(false);
-          setSendLocked(false);
-        }
       }
     }
 
@@ -721,22 +705,27 @@ export function ChatInterface({
         }
       }
       // Save the assistant's response (accumulatedContent) to Supabase (if addMessage is provided and a thread is selected)
+      if (accumulatedContent && addMessage && selectedThreadId) {
+        // Add the assistant's response directly to the messages state
+        const assistantMessage: Message = {
+          id: uuidv4(),
+          content: accumulatedContent,
+          type: "text",
+          role: "assistant",
+          timestamp: new Date(),
+        };
+        setMessages((prev) => [...prev, assistantMessage]);
+        
+        // Persist the assistant's response to the backend
+        await addMessage("assistant", accumulatedContent);
+      }
+      
       setSendLocked(false);
       setIsProcessing(false);
       setIsStreaming(false);
       setInput("");
       setSelectedFile(null);
       abortControllerRef.current = null;
-      if (fetchMessages) {
-        setMessages((prev) => prev.filter(msg => !msg.id.startsWith('temp-')));
-        try {
-          await fetchMessages();
-        } finally {
-          setIsProcessing(false);
-          setIsStreaming(false);
-          setSendLocked(false);
-        }
-      }
     } catch (error: any) {
       if (error.name === 'AbortError' || (abortControllerRef.current && abortControllerRef.current.signal.aborted)) {
         console.log('[streaming catch] AbortError caught, resetting UI state');
@@ -828,8 +817,8 @@ export function ChatInterface({
     }
   }, [selectedThreadId]);
 
-  // Filter out temp messages before rendering
-  const filteredMessages = messages.filter(msg => !msg.id.startsWith('temp-'));
+  // Use messages directly without filtering out temp messages
+  const displayMessages = messages;
 
   // Drag and drop handlers for file upload
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
@@ -922,7 +911,7 @@ export function ChatInterface({
         className="flex-1 overflow-y-auto p-4 pt-24 pb-28 space-y-4 scrollbar-w-2 scrollbar-track-blue-lighter scrollbar-thumb-blue scrollbar-thumb-rounded"
       >
         <div className="max-w-2xl mx-auto w-full">
-          {filteredMessages.map((message, idx) => {
+          {displayMessages.map((message, idx) => {
             // Handle both string and Date timestamps
             const timestamp = message.timestamp instanceof Date 
               ? message.timestamp.getTime() 

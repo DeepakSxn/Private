@@ -28,13 +28,19 @@ export function useMessages(threadId: string | undefined) {
     });
     const newMsg = await res.json();
     console.log(`[useMessages] API /api/threads/${threadId}/messages POST response:`, newMsg);
-    setMessages((prev) => [...prev, newMsg]);
+    // Don't automatically add to messages state - let the parent component handle this
     return newMsg;
   };
 
+  // Only fetch messages when threadId changes, but not automatically
   useEffect(() => {
-    fetchMessages();
-  }, [fetchMessages]);
+    if (threadId) {
+      fetchMessages();
+    } else {
+      setMessages([]);
+      setLoading(false);
+    }
+  }, [threadId, fetchMessages]);
 
   return {
     messages,
